@@ -1,0 +1,26 @@
+{
+  "TASTY_THAI": {
+    "name": "泰泰好吃",
+    "items": [
+      {"id": "basil_chicken", "name": "打拋雞飯", "price": 110, "available": true},
+      {"id": "green_curry", "name": "綠咖哩雞", "price": 120, "available": true},
+      {"id": "tofu", "name": "羅勒豆腐", "price": 105, "available": true}
+    ]
+  },
+  "MAMA_TACOS": {
+    "name": "媽媽塔可",
+    "items": [
+      {"id": "al_pastor", "name": "墨西哥烤肉塔可", "price": 95, "available": true},
+      {"id": "veggie", "name": "蔬食塔可", "price": 90, "available": true},
+      {"id": "combo", "name": "塔可雙拼", "price": 120, "available": true}
+    ]
+  },
+  "HARVEST_BOWL": {
+    "name": "豐收碗",
+    "items": [
+      {"id": "chicken_bowl", "name": "香料雞胸碗", "price": 130, "available": true},
+      {"id": "vegan_bowl", "name": "溫沙拉蔬菜碗", "price": 125, "available": true},
+      {"id": "beef_bowl", "name": "照燒牛肉碗", "price": 135, "available": true}
+    ]
+  }
+}
