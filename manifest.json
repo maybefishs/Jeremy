@@ -1,0 +1,21 @@
+{
+  "name": "LunchVote+",
+  "short_name": "LunchVote",
+  "description": "老師 5 分鐘上線、每天省 20 分鐘統計。讓午餐變簡單，一鍵投票、一鍵下單、一鍵交接。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#3a6ff7",
+  "theme_color": "#3a6ff7",
+  "icons": [
+    {
+      "src": "icons/192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
