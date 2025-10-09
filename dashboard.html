@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LunchVote+ Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script>
+      dayjs.extend(window.dayjs_plugin_utc);
+      dayjs.extend(window.dayjs_plugin_timezone);
+    </script>
+  </head>
+  <body data-page="dashboard">
+    <header class="top-bar">
+      <div class="brand">
+        <span class="badge badge-accent">儀表板</span>
+        <h1>LunchVote+ 數據總覽</h1>
+        <p class="tagline">人氣餐廳、每日總額、付款狀態一眼掌握</p>
+      </div>
+    </header>
+
+    <main>
+      <section class="card shell">
+        <h2>餐廳人氣</h2>
+        <canvas id="chartRestaurants"></canvas>
+      </section>
+
+      <section class="card shell">
+        <h2>每日訂餐總額</h2>
+        <canvas id="chartDaily"></canvas>
+      </section>
+
+      <section class="card shell">
+        <h2>付款狀態</h2>
+        <canvas id="chartPayments"></canvas>
+      </section>
+    </main>
+
+    <footer class="action-bar">
+      <div class="totals">
+        <span>操作提示</span>
+        <strong>滑動切換圖表</strong>
+      </div>
+      <div class="totals">
+        <span>更新時間</span>
+        <strong id="dashboardTimestamp">--:--</strong>
+      </div>
+      <div class="totals">
+        <span>下一步</span>
+        <strong>確認備份</strong>
+      </div>
+      <div class="totals">
+        <span>口號</span>
+        <strong>午餐變簡單</strong>
+      </div>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+    <script type="module" src="./dashboard.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('dashboardTimestamp').textContent = dayjs().format('HH:mm');
+      });
+    </script>
+  </body>
+</html>
