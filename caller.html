@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LunchVote+ Caller 控台</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+    <script>
+      dayjs.extend(window.dayjs_plugin_utc);
+      dayjs.extend(window.dayjs_plugin_timezone);
+    </script>
+  </head>
+  <body data-page="caller">
+    <header class="top-bar">
+      <div class="brand">
+        <span class="badge badge-accent">Caller 模式</span>
+        <h1>收款與交接儀表板</h1>
+        <p class="tagline">16:30 預訂提醒 · 17:00 手機摘要 · 5 秒 Undo</p>
+      </div>
+      <div class="phase-indicator">
+        <span class="badge" id="phaseBadge">點餐中</span>
+        <span id="countdown">--:--</span>
+      </div>
+    </header>
+
+    <div id="preorderBanner">17:00 到囉！記得致電餐廳確認訂單與付款。</div>
+
+    <main>
+      <section class="card shell">
+        <h2>付款狀態</h2>
+        <div id="callerOutstanding" class="trust-block"></div>
+        <div id="callerOrders"></div>
+      </section>
+
+      <section class="card shell">
+        <h2>交接工具</h2>
+        <div class="order-actions">
+          <button id="callerCopyLine" class="primary" type="button">一鍵複製 LINE 摘要</button>
+          <button id="callerCopyPhone" class="ghost" type="button">複製電話摘要</button>
+          <button id="callerExportCsv" class="ghost" type="button">匯出 CSV</button>
+          <button id="callerLockOrder" class="ghost" type="button">鎖定點餐</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="action-bar">
+      <div class="totals">
+        <span>Caller 小提醒</span>
+        <strong>付款後務必 Undo 看看</strong>
+      </div>
+      <div class="totals">
+        <span>LINE 分享</span>
+        <strong>長按貼上</strong>
+      </div>
+      <div class="totals">
+        <span>電話摘要</span>
+        <strong>30 秒搞定</strong>
+      </div>
+      <div class="totals">
+        <span>班級口號</span>
+        <strong>午餐變簡單</strong>
+      </div>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+    <script type="module" src="./caller.js"></script>
+  </body>
+</html>
