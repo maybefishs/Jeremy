@@ -1,0 +1,45 @@
+{
+  "settings": {
+    "mode": "vote",
+    "requiresPreorder": true,
+    "baseDate": "2024-09-01",
+    "timezone": "Asia/Taipei",
+    "voteLocked": false,
+    "orderLocked": false,
+    "backup": {
+      "enabled": false,
+      "type": "sheets",
+      "url": ""
+    }
+  },
+  "restaurants": [
+    {
+      "id": "TASTY_THAI",
+      "name": "泰泰好吃",
+      "requiresPreorder": true,
+      "status": "open"
+    },
+    {
+      "id": "MAMA_TACOS",
+      "name": "媽媽塔可",
+      "requiresPreorder": false,
+      "status": "open"
+    },
+    {
+      "id": "HARVEST_BOWL",
+      "name": "豐收碗",
+      "requiresPreorder": false,
+      "status": "open"
+    }
+  ],
+  "names": [
+    "王小明",
+    "林美珍",
+    "陳大偉",
+    "張心瑜",
+    "吳柏翰"
+  ],
+  "votes": {},
+  "orders": {},
+  "payments": {}
+}
