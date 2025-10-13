@@ -65,18 +65,15 @@ async function fetchJSON(url) {
 }
 
 async function initializeData() {
-    // *** 修正點 1：強化判斷，只要名單是空的就載入 ***
     if (state.names.length === 0 || state.restaurants.length === 0) {
         console.log("偵測到需要載入初始資料...");
         const [names, seedData, menus] = await Promise.all([
             fetchJSON('./data/names.json'),
-            // *** 修正點 2：拿掉多餘的點，修正路徑 ***
             fetchJSON('./data/seed.json'),
             fetchJSON('./data/menus.json')
         ]);
 
         if (names) state.names = names;
-        // 在 seed.json 中，餐廳資料是在 "restaurants" 這個 key 底下
         if (seedData && seedData.restaurants) state.restaurants = seedData.restaurants;
         if (menus) state.menus = menus;
         
@@ -201,7 +198,7 @@ async function bootstrapApp() {
 
   window.addEventListener(UPDATE_EVENT, renderUI);
 
-  console.log("LunchVote+ 中央電腦 (修正版) 已啟動。");
+  console.log("LunchVote+ 中央電腦 (完全體) 已啟動。");
 }
 
 document.addEventListener('DOMContentLoaded', bootstrapApp);
