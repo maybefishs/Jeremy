@@ -92,7 +92,8 @@ function updateVoteUI() {
  * 頁面載入完成後執行的初始化函式
  */
 async function initializeVotePage() {
-    await whenReady; // 確保 app.js 已經把名單跟餐廳都畫好了
+    // *** 修正點：把 whenReady 當成函式呼叫 ***
+    await whenReady(); 
 
     // 初始化名字選擇
     const names = getNames();
@@ -115,7 +116,7 @@ async function initializeVotePage() {
         } else {
             customNameInput.classList.add('hidden');
             localStorage.setItem('lunchvote-user-name', nameSelect.value);
-            updateVoteUI(); // 切換名字時也要更新投票狀態
+            updateVoteUI(); 
         }
     });
 
@@ -126,7 +127,6 @@ async function initializeVotePage() {
         }
     });
 
-    // 為所有餐廳卡片加上點擊事件監聽 (事件委派)
     voteCardsContainer.addEventListener('click', (event) => {
         const card = event.target.closest('.vote-card');
         if (card && card.dataset.restaurantId) {
@@ -134,10 +134,8 @@ async function initializeVotePage() {
         }
     });
 
-    // 監聽來自 app.js 的全局更新事件
     window.addEventListener(UPDATE_EVENT, updateVoteUI);
     
-    // 第一次載入時，也手動更新一次UI
     updateVoteUI();
 
     console.log("投票頁面遙控器 (vote.js) 已準備就緒。");
