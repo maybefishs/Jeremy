@@ -22,7 +22,9 @@ const DEFAULT_STATE = {
 
 let state = null;
 const readyPromise = new Promise((resolve) => {
-  window.whenReady = resolve;
+  // *** 修正點：把 resolve 函式本身掛到 window 上 ***
+  window.whenReady = () => readyPromise; 
+  readyPromise.resolve = resolve; // 讓 bootstrapApp 可以呼叫
 });
 
 // ------------------- 狀態管理 (State Management) -------------------
@@ -126,7 +128,7 @@ function renderRestaurantOptions() {
 
         card.innerHTML = `
             <h3 class="card-title">${restaurant.name}</h3>
-            <p class="card-meta">${restaurant.tags?.join('・') || (restaurant.requires_preorder ? '需提前預訂' : '可當日訂')}</p>
+            <p class="card-meta">${restaurant.tags?.join('・') || (restaurant.requiresPreorder ? '需提前預訂' : '可當日訂')}</p>
         `;
         container.appendChild(card);
     });
@@ -194,7 +196,8 @@ async function bootstrapApp() {
   
   renderUI();
   
-  window.whenReady(state);
+  // *** 修正點：在所有東西都準備好之後，才呼叫 resolve ***
+  readyPromise.resolve(state);
 
   window.addEventListener(UPDATE_EVENT, renderUI);
 
