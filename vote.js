@@ -3,9 +3,9 @@ import {
   getActiveDate,
   recordVote,
   getVotes,
-  getVoteSummary, // 我們需要這個來更新統計
-  getRestaurantById, // 也需要這個來顯示名字
-  getNames // 用來檢查其他選項
+  getVoteSummary,
+  getRestaurantById,
+  getNames
 } from './app.js';
 
 // --- 全域變數 ---
@@ -55,10 +55,8 @@ function handleVote(restaurantId) {
     return;
   }
   
-  // 保存名字紀錄，方便下次使用
   localStorage.setItem('lunchvote-user-name', name);
   
-  // 透過 app.js 紀錄投票
   recordVote(getActiveDate(), name, restaurantId);
   const restaurant = getRestaurantById(restaurantId);
   showToast(`${name} 已投給 ${restaurant ? restaurant.name : '未知餐廳'}`);
@@ -67,7 +65,7 @@ function handleVote(restaurantId) {
 /**
  * 當 app.js 的資料更新時，觸發這裡的 UI 更新
  */
-function updateUIFromState() {
+function updateVoteUI() {
     if (!voteSection) return;
 
     // 更新投票統計
@@ -94,7 +92,7 @@ function updateUIFromState() {
  * 頁面載入完成後執行的初始化函式
  */
 async function initializeVotePage() {
-    await whenReady(); // 確保 app.js 已經把名單跟餐廳都畫好了
+    await whenReady; // 確保 app.js 已經把名單跟餐廳都畫好了
 
     // 初始化名字選擇
     const names = getNames();
@@ -117,7 +115,7 @@ async function initializeVotePage() {
         } else {
             customNameInput.classList.add('hidden');
             localStorage.setItem('lunchvote-user-name', nameSelect.value);
-            updateUIFromState(); // 切換名字時也要更新投票狀態
+            updateVoteUI(); // 切換名字時也要更新投票狀態
         }
     });
 
@@ -137,15 +135,15 @@ async function initializeVotePage() {
     });
 
     // 監聽來自 app.js 的全局更新事件
-    window.addEventListener('lunchvote:update', updateUIFromState);
+    window.addEventListener(UPDATE_EVENT, updateVoteUI);
     
     // 第一次載入時，也手動更新一次UI
-    updateUIFromState();
+    updateVoteUI();
 
     console.log("投票頁面遙控器 (vote.js) 已準備就緒。");
 }
 
-// 只有在投票區塊存在時，才執行初始化
 if (voteSection) {
   initializeVotePage();
 }
+
