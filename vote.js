@@ -1,133 +1,28 @@
 import {
-  bootstrapApp,
   whenReady,
   getActiveDate,
-  getRestaurants,
-  getVoteSummary,
   recordVote,
-  getSettings,
-  lockVote,
-  generateLineSummary,
-  getNames,
-  getVotes
+  getVotes,
+  getVoteSummary, // 我們需要這個來更新統計
+  getRestaurantById, // 也需要這個來顯示名字
+  getNames // 用來檢查其他選項
 } from './app.js';
 
-const NAME_STORAGE_KEY = 'lunchvote-user-name';
+// --- 全域變數 ---
+let currentName = localStorage.getItem('lunchvote-user-name') || '';
+
+// --- DOM 元素 ---
 const voteSection = document.querySelector('[data-section="vote"]');
-if (voteSection) {
-  bootstrapApp();
-  let currentName = localStorage.getItem(NAME_STORAGE_KEY) || '';
-  const nameSelect = document.getElementById('nameSelect');
-  const customNameInput = document.getElementById('customNameInput');
-  const voteGrid = document.getElementById('voteCards');
-  const voteResultList = document.getElementById('voteResult');
-  const lockVoteBtn = document.getElementById('lockVoteBtn');
-  const copyLineBtn = document.getElementById('copyVoteLine');
-  const phaseBadge = document.getElementById('phaseBadge');
-  const countdown = document.getElementById('countdown');
-  let currentPhase = 'vote';
+const nameSelect = document.getElementById('user-select-vote');
+const customNameInput = document.getElementById('customNameInput');
+const voteCardsContainer = document.getElementById('voteCards');
+const voteResultList = document.getElementById('voteResult');
 
-  function resolveName() {
-    if (nameSelect?.value === 'other') {
-      return customNameInput.value.trim();
-    }
-    return nameSelect?.value || currentName;
-  }
-
-  function saveName(name) {
-    if (!name) return;
-    currentName = name;
-    localStorage.setItem(NAME_STORAGE_KEY, name);
-  }
-
-  function renderNames() {
-    if (!nameSelect) return;
-    const names = getNames();
-    nameSelect.innerHTML = '<option value="">選擇姓名</option>';
-    names.forEach((name) => {
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = name;
-      if (name === currentName) {
-        option.selected = true;
-      }
-      nameSelect.appendChild(option);
-    });
-    const other = document.createElement('option');
-    other.value = 'other';
-    other.textContent = '其他…';
-    nameSelect.appendChild(other);
-    if (currentName && !names.includes(currentName)) {
-      nameSelect.value = 'other';
-      customNameInput.classList.remove('hidden');
-      customNameInput.value = currentName;
-    }
-  }
-
-  function renderVoteCards() {
-    if (!voteGrid) return;
-    voteGrid.innerHTML = '';
-    getRestaurants().forEach((restaurant) => {
-      if (restaurant.status === 'closed') return;
-      const card = document.createElement('button');
-      card.className = 'card vote-card';
-      card.type = 'button';
-      card.dataset.restaurantId = restaurant.id;
-      card.innerHTML = `
-        <span class="card-title">${restaurant.name}</span>
-        <span class="card-meta">${restaurant.requiresPreorder ? '需預訂' : '現場快速'}</span>
-      `;
-      card.addEventListener('click', () => {
-        const name = resolveName();
-        if (!name) {
-          showToast('請先選擇姓名');
-          return;
-        }
-        saveName(name);
-        recordVote(getActiveDate(), name, restaurant.id);
-        highlightSelection(restaurant.id);
-        updateVoteSummary();
-        showToast(`已投給 ${restaurant.name}`);
-      });
-      voteGrid.appendChild(card);
-    });
-    highlightSelection(getVotesForMe());
-    setVoteInteractivity(currentPhase === 'vote' && !getSettings().voteLocked);
-  }
-
-  function getVotesForMe() {
-    const name = resolveName();
-    if (!name) return null;
-    const votes = getVotes(getActiveDate());
-    return votes[name] || null;
-  }
-
-  function highlightSelection(restaurantId) {
-    voteGrid?.querySelectorAll('.vote-card').forEach((card) => {
-      card.classList.toggle('selected', card.dataset.restaurantId === restaurantId);
-    });
-  }
-
-  function setVoteInteractivity(enabled) {
-    voteGrid?.querySelectorAll('button').forEach((button) => {
-      button.disabled = !enabled;
-      button.classList.toggle('disabled', !enabled);
-    });
-  }
-
-  function updateVoteSummary() {
-    if (!voteResultList) return;
-    const summary = getVoteSummary(getActiveDate());
-    summary.sort((a, b) => b.count - a.count);
-    voteResultList.innerHTML = '';
-    summary.forEach((item, index) => {
-      const li = document.createElement('li');
-      li.textContent = `${index + 1}. ${item.name} — ${item.count} 票`;
-      voteResultList.appendChild(li);
-    });
-  }
-
-  function showToast(message) {
+/**
+ * 顯示一個短暫的提示訊息
+ * @param {string} message - 要顯示的訊息
+ */
+function showToast(message) {
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.textContent = message;
@@ -137,78 +32,120 @@ if (voteSection) {
       toast.classList.remove('visible');
       setTimeout(() => toast.remove(), 300);
     }, 2500);
+}
+
+/**
+ * 解析目前選擇的姓名
+ */
+function resolveName() {
+    if (nameSelect.value === 'other') {
+        return customNameInput.value.trim();
+    }
+    return nameSelect.value;
+}
+
+/**
+ * 處理投票動作
+ * @param {string} restaurantId - 餐廳 ID
+ */
+function handleVote(restaurantId) {
+  const name = resolveName();
+  if (!name) {
+    showToast('請先選擇或輸入你的名字！');
+    return;
   }
+  
+  // 保存名字紀錄，方便下次使用
+  localStorage.setItem('lunchvote-user-name', name);
+  
+  // 透過 app.js 紀錄投票
+  recordVote(getActiveDate(), name, restaurantId);
+  const restaurant = getRestaurantById(restaurantId);
+  showToast(`${name} 已投給 ${restaurant ? restaurant.name : '未知餐廳'}`);
+}
 
-  function handlePhaseChange(event) {
-    const { phase, deadlines } = event.detail;
-    currentPhase = phase;
-    phaseBadge.textContent = phase === 'vote' ? '投票中' : phase === 'order' ? '點餐中' : '結果';
-    if (phase === 'vote') {
-      countdown.textContent = `截單 ${deadlines.vote}`;
-      voteSection.classList.remove('locked');
-    } else if (phase === 'order') {
-      countdown.textContent = `下單截止 ${deadlines.order}`;
-      voteSection.classList.add('locked');
-    } else {
-      countdown.textContent = '今日結果';
-      voteSection.classList.add('locked');
-    }
-    const settings = getSettings();
-    if (settings.mode === 'direct') {
-      voteSection.classList.add('hidden');
-    } else {
-      voteSection.classList.remove('hidden');
-    }
-    lockVoteBtn.classList.toggle('hidden', phase !== 'vote' || settings.mode === 'direct');
-    copyLineBtn.classList.toggle('hidden', phase === 'vote' && settings.mode !== 'direct');
-    setVoteInteractivity(phase === 'vote' && !settings.voteLocked);
-  }
+/**
+ * 當 app.js 的資料更新時，觸發這裡的 UI 更新
+ */
+function updateUIFromState() {
+    if (!voteSection) return;
 
-  nameSelect?.addEventListener('change', () => {
-    const value = nameSelect.value;
-    if (value === 'other') {
-      customNameInput.classList.remove('hidden');
-      customNameInput.focus();
-    } else {
-      customNameInput.classList.add('hidden');
-      customNameInput.value = '';
-      saveName(value);
-      highlightSelection(getVotesForMe());
-    }
-  });
-
-  customNameInput?.addEventListener('blur', () => {
-    const value = customNameInput.value.trim();
-    if (value) {
-      saveName(value);
-    }
-  });
-
-  lockVoteBtn?.addEventListener('click', () => {
-    if (confirm('確定要鎖定投票並進入點餐階段嗎？')) {
-      lockVote();
-      voteSection.classList.add('locked');
-      setVoteInteractivity(false);
-      showToast('投票已鎖定');
-    }
-  });
-
-  copyLineBtn?.addEventListener('click', async () => {
-    const summary = generateLineSummary(getActiveDate());
-    await navigator.clipboard.writeText(summary);
-    showToast('已複製到 LINE');
-  });
-
-  whenReady().then(() => {
-    renderNames();
-    renderVoteCards();
-    updateVoteSummary();
-    window.addEventListener('lunchvote:update', () => {
-      updateVoteSummary();
-      renderVoteCards();
-      renderNames();
+    // 更新投票統計
+    const summary = getVoteSummary(getActiveDate());
+    summary.sort((a, b) => b.count - a.count);
+    voteResultList.innerHTML = '';
+    summary.forEach((item, index) => {
+      const li = document.createElement('li');
+      li.textContent = `${index + 1}. ${item.name} — ${item.count} 票`;
+      voteResultList.appendChild(li);
     });
-    window.addEventListener('lunchvote:phase', handlePhaseChange);
-    window.LunchVote.checkPhaseChange();
-  });
+
+    // 更新被選中的卡片樣式
+    const name = resolveName();
+    const myVote = name ? getVotes(getActiveDate())[name] : null;
+    const cards = voteCardsContainer.querySelectorAll('.vote-card');
+    cards.forEach(card => {
+        card.classList.toggle('selected', card.dataset.restaurantId === myVote);
+    });
+}
+
+
+/**
+ * 頁面載入完成後執行的初始化函式
+ */
+async function initializeVotePage() {
+    await whenReady(); // 確保 app.js 已經把名單跟餐廳都畫好了
+
+    // 初始化名字選擇
+    const names = getNames();
+    const savedName = localStorage.getItem('lunchvote-user-name');
+    if (savedName) {
+        if (names.includes(savedName)) {
+            nameSelect.value = savedName;
+        } else {
+            nameSelect.value = 'other';
+            customNameInput.classList.remove('hidden');
+            customNameInput.value = savedName;
+        }
+    }
+    
+    // 監聽下拉選單的變化
+    nameSelect.addEventListener('change', () => {
+        if (nameSelect.value === 'other') {
+            customNameInput.classList.remove('hidden');
+            customNameInput.focus();
+        } else {
+            customNameInput.classList.add('hidden');
+            localStorage.setItem('lunchvote-user-name', nameSelect.value);
+            updateUIFromState(); // 切換名字時也要更新投票狀態
+        }
+    });
+
+    customNameInput.addEventListener('blur', () => {
+        const name = customNameInput.value.trim();
+        if (name) {
+            localStorage.setItem('lunchvote-user-name', name);
+        }
+    });
+
+    // 為所有餐廳卡片加上點擊事件監聽 (事件委派)
+    voteCardsContainer.addEventListener('click', (event) => {
+        const card = event.target.closest('.vote-card');
+        if (card && card.dataset.restaurantId) {
+            handleVote(card.dataset.restaurantId);
+        }
+    });
+
+    // 監聽來自 app.js 的全局更新事件
+    window.addEventListener('lunchvote:update', updateUIFromState);
+    
+    // 第一次載入時，也手動更新一次UI
+    updateUIFromState();
+
+    console.log("投票頁面遙控器 (vote.js) 已準備就緒。");
+}
+
+// 只有在投票區塊存在時，才執行初始化
+if (voteSection) {
+  initializeVotePage();
 }
