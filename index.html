@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LunchVote+ | 讓午餐變簡單</title>
+    <title>LunchVote+ | 訂餐系統</title>
     <link rel="manifest" href="./manifest.json" />
     <link rel="stylesheet" href="./styles.css" />
     <meta name="theme-color" content="#3a6ff7" />
@@ -30,15 +30,17 @@
     </header>
 
     <main>
+      <!-- 投票區塊 -->
       <section class="card shell" data-section="vote">
         <header class="section-header">
           <h2>投票階段</h2>
           <p>選出今天最想吃的餐廳，票數即時更新。</p>
         </header>
         <div class="field-group">
-          <label for="nameSelect">我是</label>
+          <label for="user-select-vote">我是</label>
           <div class="name-picker">
-            <select id="nameSelect"></select>
+            <!-- *** ID 已修正 *** -->
+            <select id="user-select-vote"></select>
             <input id="customNameInput" class="hidden" type="text" placeholder="輸入姓名" />
           </div>
         </div>
@@ -50,14 +52,22 @@
         <ul id="voteResult" class="result-list"></ul>
       </section>
 
-      <section class="card shell" data-section="order">
+      <!-- 點餐區塊 (預設隱藏) -->
+      <section class="card shell hidden" data-section="order">
         <header class="section-header">
           <h2>點餐階段</h2>
           <p>挑選菜單，送出後可隨時修改，鎖定前可再調整。</p>
         </header>
         <div class="field-group">
+            <label for="user-select-order">我是</label>
+             <div class="name-picker">
+                <!-- *** ID 已加上 *** -->
+                <select id="user-select-order"></select>
+             </div>
+        </div>
+        <div class="field-group">
           <label for="restaurantSelect">指定餐廳</label>
-          <select id="restaurantSelect"></select>
+          <select id="restaurantSelect" disabled></select>
         </div>
         <div id="menuCards" class="card-grid"></div>
         <textarea id="orderNote" placeholder="備註（加辣、不要香菜...）"></textarea>
@@ -68,7 +78,8 @@
         </div>
       </section>
 
-      <section class="card shell" data-section="result">
+      <!-- 結果區塊 (預設隱藏) -->
+      <section class="card shell hidden" data-section="result">
         <header class="section-header">
           <h2>結果總覽</h2>
           <p>今日統計與匯總，方便快速交接。</p>
@@ -96,21 +107,11 @@
         <strong id="missingOrders">--</strong>
       </div>
     </footer>
-
+    
+    <!-- *** 修正點：確保 app.js 是第一個載入的模組 *** -->
     <script type="module" src="./app.js"></script>
     <script type="module" src="./vote.js"></script>
     <script type="module" src="./order.js"></script>
-    <script type="module">
-      import { whenReady, generateLineSummary, getActiveDate } from './app.js';
-      const summaryEl = document.getElementById('resultSummary');
-      function refreshSummary() {
-        summaryEl.textContent = generateLineSummary(getActiveDate());
-      }
-      whenReady().then(() => {
-        refreshSummary();
-        window.addEventListener('lunchvote:update', refreshSummary);
-        window.addEventListener('lunchvote:phase', refreshSummary);
-      });
-    </script>
+
   </body>
 </html>
