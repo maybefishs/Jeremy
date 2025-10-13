@@ -4,11 +4,13 @@ const UPDATE_EVENT = 'lunchvote:update';
 const PHASE_EVENT = 'lunchvote:phase';
 const SW_EVENT = 'lunchvote:sw-update';
 
+// ------------------- 預設狀態 (Default State) -------------------
+
 const DEFAULT_STATE = {
   settings: {
     mode: 'vote',
-    requiresPreorder: true,
-    baseDate: null, // *** 修正點：初始設為 null，避免在載入時立即呼叫 dayjs
+    requiresPreorder: false,
+    baseDate: null, // 延後初始化，避免 dayjs 錯誤
     timezone: 'Asia/Taipei',
     voteLocked: false,
     orderLocked: false,
@@ -18,53 +20,9 @@ const DEFAULT_STATE = {
       url: ''
     }
   },
-  restaurants: [
-    {
-      id: 'TASTY_THAI',
-      name: '泰泰好吃',
-      requiresPreorder: true,
-      status: 'open'
-    },
-    {
-      id: 'MAMA_TACOS',
-      name: '媽媽塔可',
-      requiresPreorder: false,
-      status: 'open'
-    },
-    {
-      id: 'HARVEST_BOWL',
-      name: '豐收碗',
-      requiresPreorder: false,
-      status: 'open'
-    }
-  ],
-  menus: {
-    TASTY_THAI: {
-      name: '泰泰好吃',
-      items: [
-        { id: 'basil_chicken', name: '打拋雞飯', price: 110, available: true },
-        { id: 'green_curry', name: '綠咖哩雞', price: 120, available: true },
-        { id: 'tofu', name: '羅勒豆腐', price: 105, available: true }
-      ]
-    },
-    MAMA_TACOS: {
-      name: '媽媽塔可',
-      items: [
-        { id: 'al_pastor', name: '墨西哥烤肉塔可', price: 95, available: true },
-        { id: 'veggie', name: '蔬食塔可', price: 90, available: true },
-        { id: 'combo', name: '塔可雙拼', price: 120, available: true }
-      ]
-    },
-    HARVEST_BOWL: {
-      name: '豐收碗',
-      items: [
-        { id: 'chicken_bowl', name: '香料雞胸碗', price: 130, available: true },
-        { id: 'vegan_bowl', name: '溫沙拉蔬菜碗', price: 125, available: true },
-        { id: 'beef_bowl', name: '照燒牛肉碗', price: 135, available: true }
-      ]
-    }
-  },
-  names: ['王小明', '林美珍', '陳大偉', '張心瑜', '吳柏翰'],
+  restaurants: [],
+  menus: {},
+  names: [],
   votes: {},
   orders: {},
   payments: {},
@@ -77,658 +35,248 @@ const DEFAULT_SECURITY = {
   lockUntil: 0
 };
 
+// ------------------- 全域變數 (Global Variables) -------------------
+
 let state = null;
 let security = null;
 let readyResolver;
 const readyPromise = new Promise((resolve) => {
-  readyResolver = resolve;
+  window.whenReady = resolve;
 });
 let phaseInterval = null;
 let backupInterval = null;
 
-function ensureDayjsPlugins() {
-  if (!dayjs.tz) {
-    console.error('dayjs timezone plugin missing');
-  }
-}
+// ------------------- 狀態管理 (State Management) -------------------
 
+/**
+ * 從 localStorage 載入狀態，若失敗則使用預設值
+ */
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
+      // 合併預設值，確保新舊版本都有對應的 key
       return {
         ...DEFAULT_STATE,
         ...parsed,
         settings: { ...DEFAULT_STATE.settings, ...parsed.settings },
-        restaurants: parsed.restaurants || DEFAULT_STATE.restaurants,
-        menus: parsed.menus || DEFAULT_STATE.menus,
-        names: parsed.names || DEFAULT_STATE.names,
-        votes: parsed.votes || {},
-        orders: parsed.orders || {},
-        payments: parsed.payments || {},
-        currentPhase: parsed.currentPhase || DEFAULT_STATE.currentPhase
       };
     } catch (error) {
-      console.error('Failed to parse stored state', error);
+      console.error('解析儲存狀態失敗', error);
     }
   }
-  return deepClone(DEFAULT_STATE);
+  return JSON.parse(JSON.stringify(DEFAULT_STATE)); // 使用深拷貝
 }
 
+/**
+ * 從 localStorage 載入安全設定
+ */
 function loadSecurity() {
   const raw = localStorage.getItem(SECURITY_KEY);
   if (raw) {
     try {
-      const parsed = JSON.parse(raw);
-      return { ...DEFAULT_SECURITY, ...parsed };
-    } catch (error)
-      console.error('Failed to parse security state', error);
+      return { ...DEFAULT_SECURITY, ...JSON.parse(raw) };
+    } catch (error) {
+      console.error('解析安全設定失敗', error);
     }
   }
-  return deepClone(DEFAULT_SECURITY);
+  return JSON.parse(JSON.stringify(DEFAULT_SECURITY));
 }
 
+/**
+ * 將目前狀態儲存至 localStorage
+ * @param {boolean} triggerEvent - 是否觸發全局更新事件
+ */
 function persistState(triggerEvent = true) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if (triggerEvent) {
-    window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: deepClone(state) }));
+    window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: JSON.parse(JSON.stringify(state)) }));
   }
 }
 
+/**
+ * 將安全設定儲存至 localStorage
+ */
 function persistSecurity() {
   localStorage.setItem(SECURITY_KEY, JSON.stringify(security));
 }
 
-function ensureDateBucket(obj, date) {
-  if (!obj[date]) {
-    obj[date] = {};
-  }
-  return obj[date];
+// ------------------- 資料初始化 (Data Initialization) -------------------
+
+/**
+ * 從 data/ 資料夾非同步讀取 JSON 檔案
+ * @param {string} url - 檔案路徑
+ */
+async function fetchJSON(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`無法載入 ${url}: ${response.statusText}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
 }
 
-function getSettings() {
-  return state.settings;
+/**
+ * 初始化所有必要的外部資料 (名單、餐廳等)
+ */
+async function initializeData() {
+    // 只有在 state 是空的 (第一次執行) 時候才從檔案載入
+    if (state.names.length === 0 && state.restaurants.length === 0) {
+        console.log("偵測到首次執行，正在從 data/ 檔案載入初始資料...");
+        const [names, seedData, menus] = await Promise.all([
+            fetchJSON('./data/names.json'),
+            fetchJSON('./data/seed.json'),
+            fetchJSON('./data/menus.json')
+        ]);
+
+        if (names) state.names = names;
+        if (seedData && seedData.restaurants) state.restaurants = seedData.restaurants;
+        if (menus) state.menus = menus;
+        
+        persistState(false); // 第一次載入後先不觸發事件
+    }
 }
 
+
+// ------------------- 時間與階段邏輯 (Time & Phase Logic) -------------------
+
+/**
+ * 取得當前有效的操作日期 (YYYY-MM-DD)
+ */
 function getActiveDate() {
-  const settings = getSettings();
-  return settings.baseDate || dayjs().tz(settings.timezone || 'Asia/Taipei').format('YYYY-MM-DD');
+  return state.settings.baseDate;
 }
 
+/**
+ * 計算投票與點餐的截止時間
+ */
 function computeDeadlines() {
-  const settings = getSettings();
-  const timezone = settings.timezone || 'Asia/Taipei';
-  const base = dayjs.tz(settings.baseDate || dayjs().tz(timezone).format('YYYY-MM-DD'), timezone);
+  const { timezone, baseDate, requiresPreorder, mode } = state.settings;
+  const base = dayjs.tz(baseDate, timezone);
+  
   const voteDeadline = base.subtract(1, 'day').hour(17).minute(0).second(0);
   const orderDeadlineDefault = base.hour(10).minute(0).second(0);
-  const orderDeadlineDirect = settings.requiresPreorder
-    ? base.subtract(1, 'day').hour(17).minute(0).second(0)
+  const orderDeadlinePreorder = base.subtract(1, 'day').hour(17).minute(0).second(0);
+  
+  const orderDeadline = mode === 'direct' 
+    ? (requiresPreorder ? orderDeadlinePreorder : orderDeadlineDefault)
     : orderDeadlineDefault;
 
-  return {
-    voteDeadline,
-    orderDeadline: settings.mode === 'direct' ? orderDeadlineDirect : orderDeadlineDefault
-  };
+  return { voteDeadline, orderDeadline };
 }
 
-function getCurrentPhase(now = dayjs()) {
-  const settings = getSettings();
-  const timezone = settings.timezone || 'Asia/Taipei';
-  const zonedNow = now.tz ? now.tz(timezone) : dayjs.tz(now, timezone);
+/**
+ * 根據當前時間判斷系統應處於哪個階段
+ */
+function getCurrentPhase() {
+  const now = dayjs().tz(state.settings.timezone);
   const { voteDeadline, orderDeadline } = computeDeadlines();
+  const { mode, voteLocked, orderLocked } = state.settings;
 
-  if (settings.mode === 'direct') {
-    if (settings.orderLocked) {
-      return 'result';
-    }
-    return zonedNow.isBefore(orderDeadline) ? 'order' : 'result';
+  if (mode === 'direct') {
+    return orderLocked || now.isAfter(orderDeadline) ? 'result' : 'order';
   }
 
-  if (!settings.voteLocked && zonedNow.isBefore(voteDeadline)) {
-    return 'vote';
-  }
-  if (!settings.orderLocked && zonedNow.isBefore(orderDeadline)) {
-    return 'order';
-  }
+  // 投票模式
+  if (!voteLocked && now.isBefore(voteDeadline)) return 'vote';
+  if (!orderLocked && now.isBefore(orderDeadline)) return 'order';
   return 'result';
 }
 
+/**
+ * 檢查並更新當前階段，並觸發事件
+ */
 function checkPhaseChange() {
-  const phase = getCurrentPhase(dayjs());
-  if (phase !== state.currentPhase) {
-    state.currentPhase = phase;
-    persistState(false);
+  const newPhase = getCurrentPhase();
+  if (newPhase !== state.currentPhase) {
+    state.currentPhase = newPhase;
+    persistState(false); // 只更新狀態，不觸發全局刷新
   }
+  
   const deadlines = computeDeadlines();
   window.dispatchEvent(new CustomEvent(PHASE_EVENT, {
     detail: {
-      phase,
+      phase: newPhase,
       deadlines: {
         vote: deadlines.voteDeadline.format('YYYY-MM-DD HH:mm'),
         order: deadlines.orderDeadline.format('YYYY-MM-DD HH:mm')
       }
     }
   }));
-  return phase;
 }
 
+/**
+ * 啟動每分鐘檢查一次階段變化的計時器
+ */
 function startPhaseWatcher() {
-  if (phaseInterval) {
-    clearInterval(phaseInterval);
-  }
-  checkPhaseChange();
-  phaseInterval = setInterval(checkPhaseChange, 60 * 1000);
+  if (phaseInterval) clearInterval(phaseInterval);
+  checkPhaseChange(); // 立即執行一次
+  phaseInterval = setInterval(checkPhaseChange, 60000); // 每 60 秒檢查一次
 }
 
-function scheduleAutomaticBackup() {
-  if (backupInterval) {
-    clearInterval(backupInterval);
-    backupInterval = null;
-  }
-  const settings = getSettings();
-  if (!settings.backup?.enabled || !settings.backup.url) {
-    return;
-  }
-  const timezone = settings.timezone || 'Asia/Taipei';
-  backupInterval = setInterval(() => {
-    const now = dayjs().tz(timezone);
-    if (now.hour() === 10 && now.minute() === 5) {
-      saveDataToServer().catch((err) => console.warn('Backup failed', err));
-    }
-  }, 60 * 1000);
-}
+// ------------------- UI 渲染 (UI Rendering) -------------------
 
-function ensureSecurityWindow() {
-  const now = Date.now();
-  if (security.lockUntil && now < security.lockUntil) {
-    return false;
-  }
-  if (now >= security.lockUntil && security.lockUntil !== 0) {
-    security.lockUntil = 0;
-    security.wrongAttempts = 0;
-    persistSecurity();
-  }
-  return true;
-}
-
-async function hashPin(pin) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(pin);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-async function setPin(pin) {
-  security.pinHash = await hashPin(pin);
-  security.wrongAttempts = 0;
-  security.lockUntil = 0;
-  persistSecurity();
-}
-
-async function verifyPin(pin) {
-  if (!ensureSecurityWindow()) {
-    return { ok: false, reason: 'locked', unlockAt: security.lockUntil };
-  }
-  if (!security.pinHash) {
-    return { ok: true, reason: 'not_set' };
-  }
-  const hash = await hashPin(pin);
-  if (hash === security.pinHash) {
-    security.wrongAttempts = 0;
-    persistSecurity();
-    return { ok: true };
-  }
-  security.wrongAttempts += 1;
-  if (security.wrongAttempts >= 3) {
-    security.lockUntil = Date.now() + 60 * 1000;
-  }
-  persistSecurity();
-  return { ok: false, reason: 'mismatch', attempts: security.wrongAttempts, unlockAt: security.lockUntil };
-}
-
-function ensureDateData(date) {
-  ensureDateBucket(state.votes, date);
-  ensureDateBucket(state.orders, date);
-  ensureDateBucket(state.payments, date);
-}
-
-function recordVote(date, name, restaurantId) {
-  ensureDateData(date);
-  state.votes[date][name] = restaurantId;
-  persistState();
-}
-
-function getVotes(date) {
-  ensureDateData(date);
-  return state.votes[date];
-}
-
-function getVoteSummary(date) {
-  const votes = getVotes(date);
-  const tally = {};
-  Object.values(votes).forEach((restaurantId) => {
-    tally[restaurantId] = (tally[restaurantId] || 0) + 1;
-  });
-  const restaurants = getRestaurants();
-  return restaurants.map((restaurant) => ({
-    id: restaurant.id,
-    name: restaurant.name,
-    count: tally[restaurant.id] || 0
-  }));
-}
-
-function setOrder(date, name, order) {
-  ensureDateData(date);
-  const subtotal = order.items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const items = order.items.map((item) => ({ ...item }));
-  state.orders[date][name] = {
-    ...order,
-    items,
-    subtotal,
-    updatedAt: new Date().toISOString()
-  };
-  persistState();
-}
-
-function getOrder(date, name) {
-  ensureDateData(date);
-  return state.orders[date][name] || null;
-}
-
-function getOrders(date) {
-  ensureDateData(date);
-  return state.orders[date];
-}
-
-function setPaymentStatus(date, name, paid) {
-  ensureDateData(date);
-  if (!state.payments[date][name]) {
-    state.payments[date][name] = { paid: false, updatedAt: null };
-  }
-  state.payments[date][name].paid = paid;
-  state.payments[date][name].updatedAt = new Date().toISOString();
-  if (state.orders[date][name]) {
-    state.orders[date][name].paid = paid;
-  }
-  persistState();
-}
-
-function getPaymentStatus(date, name) {
-  ensureDateData(date);
-  return state.payments[date][name]?.paid || false;
-}
-
-function getNames() {
-  return [...state.names];
-}
-
-function addNames(newNames) {
-  const merged = new Set([...state.names, ...newNames.filter(Boolean)]);
-  state.names = Array.from(merged);
-  persistState();
-}
-
-function removeName(name) {
-  state.names = state.names.filter((n) => n !== name);
-  Object.keys(state.votes).forEach((date) => delete state.votes[date][name]);
-  Object.keys(state.orders).forEach((date) => delete state.orders[date][name]);
-  Object.keys(state.payments).forEach((date) => delete state.payments[date][name]);
-  persistState();
-}
-
-function getRestaurants(includeClosed = false) {
-  return state.restaurants.filter((restaurant) => includeClosed || restaurant.status !== 'closed');
-}
-
-function upsertRestaurant(restaurant) {
-  const index = state.restaurants.findIndex((item) => item.id === restaurant.id);
-  if (index >= 0) {
-    state.restaurants[index] = { ...state.restaurants[index], ...restaurant };
-  } else {
-    state.restaurants.push({ ...restaurant });
-  }
-  persistState();
-}
-
-function removeRestaurant(id) {
-  state.restaurants = state.restaurants.filter((restaurant) => restaurant.id !== id);
-  persistState();
-}
-
-function getMenus() {
-  return deepClone(state.menus);
-}
-
-function setMenu(restaurantId, menu) {
-  state.menus[restaurantId] = menu;
-  persistState();
+/**
+ * 統一更新所有 UI 元素
+ */
+function renderUI() {
+    // 這裡只是一個範例，實際的渲染會分散在各個模組中，由 UPDATE_EVENT 觸發
+    console.log("全局 UI 更新事件已觸發，各模組應自行更新。");
 }
 
 
-function getOrderHistory() {
-  return deepClone(state.orders);
-}
+// ------------------- 核心功能導出 (Export Core Functions) -------------------
+// 為了讓其他模組 (vote.js, order.js) 可以使用這些核心功能
 
-function getVoteHistory() {
-  return deepClone(state.votes);
-}
+export { getSettings, getActiveDate, getNames, getRestaurants, getRestaurantById, recordVote, getVotes, getVoteSummary };
+export { whenReady }; // 導出 readyPromise
 
-function computeTotals(date) {
-  const orders = getOrders(date);
-  let classTotal = 0;
-  const perRestaurant = {};
-  const unpaid = [];
-  Object.entries(orders).forEach(([name, order]) => {
-    const total = order.subtotal ?? 0;
-    classTotal += total;
-    const restaurant = order.restaurantId || 'unknown';
-    perRestaurant[restaurant] = (perRestaurant[restaurant] || 0) + total;
-    const paid = getPaymentStatus(date, name) || order.paid;
-    if (!paid) {
-      unpaid.push(name);
-    }
-  });
-  return {
-    classTotal,
-    perRestaurant,
-    unpaid
-  };
-}
+// ------------------- 應用程式初始化 (App Initialization) -------------------
 
-function generateLineSummary(date = getActiveDate()) {
-  ensureDateData(date);
-  const phase = getCurrentPhase(dayjs());
-  const voteSummary = getVoteSummary(date)
-    .sort((a, b) => b.count - a.count)
-    .map((item, index) => `${index + 1}. ${item.name}：${item.count} 票`)
-    .join('\n');
-  const totals = computeTotals(date);
-  const perRestaurant = Object.entries(totals.perRestaurant)
-    .map(([id, total]) => {
-      const restaurant = state.restaurants.find((r) => r.id === id);
-      const name = restaurant ? restaurant.name : id;
-      return `${name} $${total.toFixed(0)}`;
-    })
-    .join('\n');
-  const unpaidList = totals.unpaid.length ? totals.unpaid.join('、') : '全數完成';
-  return [
-    '午餐進度更新',
-    `日期：${date}`,
-    `目前階段：${phase}`,
-    voteSummary ? `投票結果：\n${voteSummary}` : '無投票資料',
-    perRestaurant ? `點餐金額：\n${perRestaurant}` : '尚未點餐',
-    `未付款：${unpaidList}`
-  ].join('\n\n');
-}
+/**
+ * 應用程式的主進入點
+ */
+async function bootstrapApp() {
+  // 防止重複初始化
+  if (state) return;
 
-function generatePhoneSummary(date = getActiveDate()) {
-  ensureDateData(date);
-  const totals = computeTotals(date);
-  const restaurantLines = Object.entries(totals.perRestaurant)
-    .map(([id, total]) => {
-      const restaurant = state.restaurants.find((r) => r.id === id);
-      return `${restaurant ? restaurant.name : id}：$${total.toFixed(0)}`;
-    })
-    .join('，');
-  const unpaid = totals.unpaid.join('、');
-  return `午餐 ${date} 總額 $${totals.classTotal.toFixed(0)}，${restaurantLines || '尚未下單'}。未付：${unpaid || '無'}`;
-}
+  // 載入 Day.js 函式庫
+  dayjs.extend(window.dayjs_plugin_utc);
+  dayjs.extend(window.dayjs_plugin_timezone);
 
-function exportOrdersCsv(date = getActiveDate()) {
-  ensureDateData(date);
-  const orders = getOrders(date);
-  const rows = [['姓名', '餐廳', '品項', '數量', '單價', '小計', '備註', '付款']];
-  Object.entries(orders).forEach(([name, order]) => {
-    order.items.forEach((item) => {
-      rows.push([
-        name,
-        (state.restaurants.find((r) => r.id === order.restaurantId)?.name) || order.restaurantId,
-        item.name,
-        item.qty,
-        item.price,
-        (item.price * item.qty).toFixed(0),
-        order.note || '',
-        order.paid ? '已付款' : '未付款'
-      ]);
-    });
-  });
-  const content = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const bom = '\ufeff';
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `orders_${date}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-async function saveDataToServer() {
-  const settings = getSettings();
-  if (!settings.backup?.enabled || !settings.backup.url) {
-    throw new Error('Backup not enabled');
-  }
-  const response = await fetch(settings.backup.url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      timestamp: new Date().toISOString(),
-      timezone: settings.timezone,
-      payload: state
-    })
-  });
-  if (!response.ok) {
-    throw new Error('Backup request failed');
-  }
-  return response.json().catch(() => ({}));
-}
-
-async function loadDataFromServer() {
-  const settings = getSettings();
-  if (!settings.backup?.enabled || !settings.backup.url) {
-    throw new Error('Backup not enabled');
-  }
-  const response = await fetch(settings.backup.url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json'
-    }
-  });
-  if (!response.ok) {
-    throw new Error('Load request failed');
-  }
-  const data = await response.json();
-  if (data?.payload) {
-    state = {
-      ...DEFAULT_STATE,
-      ...data.payload,
-      settings: { ...DEFAULT_STATE.settings, ...data.payload.settings }
-    };
-    persistState();
-    scheduleAutomaticBackup();
-    return true;
-  }
-  return false;
-}
-
-function updateSettings(partial) {
-  state.settings = { ...state.settings, ...partial };
-  persistState();
-  scheduleAutomaticBackup();
-  checkPhaseChange();
-}
-
-function lockVote() {
-  updateSettings({ voteLocked: true });
-}
-
-function lockOrder() {
-  updateSettings({ orderLocked: true });
-}
-
-function clearOldRecords(days = 30) {
-  const cutoff = dayjs().tz(getSettings().timezone || 'Asia/Taipei').subtract(days, 'day');
-  const keepDates = (records) => {
-    Object.keys(records).forEach((date) => {
-      if (dayjs(date).isBefore(cutoff, 'day')) {
-        delete records[date];
-      }
-    });
-  };
-  keepDates(state.votes);
-  keepDates(state.orders);
-  keepDates(state.payments);
-  persistState();
-}
-
-function deepClone(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
-
-function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('./service-worker.js').then((registration) => {
-    if (!navigator.serviceWorker.controller) return;
-    if (registration.waiting) {
-      notifySwUpdate(registration.waiting);
-    }
-    registration.addEventListener('updatefound', () => {
-      const newWorker = registration.installing;
-      if (!newWorker) return;
-      newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          notifySwUpdate(newWorker);
-        }
-      });
-    });
-  });
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload();
-  });
-}
-
-function notifySwUpdate(worker) {
-  window.dispatchEvent(new CustomEvent(SW_EVENT, {
-    detail: {
-      update: () => worker.postMessage({ type: 'SKIP_WAITING' })
-    }
-  }));
-}
-
-export async function bootstrapApp() {
-  ensureDayjsPlugins();
-  if (state) return state;
+  // 載入狀態
   state = loadState();
+  security = loadSecurity();
   
-  // *** 修正點：如果 baseDate 是 null (代表是第一次載入)，現在才設定它 ***
+  // 如果是第一次載入，設定今天的日期為 baseDate
   if (!state.settings.baseDate) {
-      state.settings.baseDate = dayjs().tz(state.settings.timezone || 'Asia/Taipei').format('YYYY-MM-DD');
+    state.settings.baseDate = dayjs().tz(state.settings.timezone).format('YYYY-MM-DD');
   }
 
-  security = loadSecurity();
+  // 處理 URL 參數
   const params = new URLSearchParams(window.location.search);
   const dateParam = params.get('d');
   if (dateParam) {
     state.settings.baseDate = dateParam;
-    persistState(false);
   }
+  
+  await initializeData(); // 載入外部 JSON 資料
+  
+  persistState(false); // 初始化完成後儲存一次
 
-  startPhaseWatcher();
-  scheduleAutomaticBackup();
-  registerServiceWorker();
-  readyResolver(state);
-  return state;
+  startPhaseWatcher(); // 啟動階段監控
+  
+  // 讓其他模_組知道 app 已經準備好了
+  window.whenReady(state);
+
+  console.log("LunchVote+ 中央電腦 (完全體) 已啟動。");
 }
 
-export function whenReady() {
-  return readyPromise;
-}
-
-export {
-  getSettings,
-  updateSettings,
-  getCurrentPhase,
-  checkPhaseChange,
-  lockVote,
-  lockOrder,
-  getActiveDate,
-  getRestaurants,
-  upsertRestaurant,
-  removeRestaurant,
-  getMenus,
-  setMenu,
-  getNames,
-  addNames,
-  removeName,
-  recordVote,
-  getVotes,
-  getVoteSummary,
-  setOrder,
-  getOrder,
-  getOrders,
-  computeTotals,
-  getOrderHistory,
-  getVoteHistory,
-  setPaymentStatus,
-  getPaymentStatus,
-  generateLineSummary,
-  generatePhoneSummary,
-  exportOrdersCsv,
-  saveDataToServer,
-  loadDataFromServer,
-  clearOldRecords,
-  setPin,
-  verifyPin,
-  hashPin,
-  scheduleAutomaticBackup
-};
-
-window.LunchVote = {
-  bootstrapApp,
-  whenReady,
-  getSettings,
-  updateSettings,
-  getCurrentPhase,
-  checkPhaseChange,
-  lockVote,
-  lockOrder,
-  getActiveDate,
-  getRestaurants,
-  upsertRestaurant,
-  removeRestaurant,
-  getMenus,
-  setMenu,
-  getNames,
-  addNames,
-  removeName,
-  recordVote,
-  getVotes,
-  getVoteSummary,
-  setOrder,
-  getOrder,
-  getOrders,
-  computeTotals,
-  getOrderHistory,
-  getVoteHistory,
-  setPaymentStatus,
-  getPaymentStatus,
-  generateLineSummary,
-  generatePhoneSummary,
-  exportOrdersCsv,
-  saveDataToServer,
-  loadDataFromServer,
-  clearOldRecords,
-  setPin,
-  verifyPin,
-  hashPin
-};
-
-window.addEventListener('load', () => {
-  bootstrapApp();
-});
+// 當 DOM 載入完成後，啟動應用程式
+document.addEventListener('DOMContentLoaded', bootstrapApp);
 
