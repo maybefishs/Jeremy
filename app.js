@@ -11,7 +11,7 @@ const DEFAULT_STATE = {
     requiresPreorder: false,
     baseDate: null,
     timezone: 'Asia/Taipei',
-    pinHash: null, // <-- PIN 功能所需
+    pinHash: null,
     pinLockout: null,
     pinAttempts: 0,
   },
@@ -83,7 +83,7 @@ function getActiveDate() {
   return state.settings.baseDate;
 }
 
-// ------------------- 【關鍵修復】PIN 碼驗證邏輯 -------------------
+// ------------------- PIN 碼驗證邏輯 -------------------
 async function simpleHash(str) {
   if (!str || typeof str !== 'string') return '';
   const buffer = new TextEncoder().encode(str);
@@ -115,7 +115,7 @@ async function verifyPin(pin) {
   } else {
     settings.pinAttempts = (settings.pinAttempts || 0) + 1;
     if (settings.pinAttempts >= 5) {
-      settings.pinLockout = Date.now() + 5 * 60 * 1000; // Lock for 5 minutes
+      settings.pinLockout = Date.now() + 5 * 60 * 1000;
     }
     persistState(false);
     return { ok: false, reason: 'incorrect' };
@@ -162,6 +162,25 @@ function renderUI() {
   renderNameOptions(document.getElementById('user-select-order'));
   renderRestaurantOptions();
 }
+
+// ------------------- 應用程式初始化 (App Initialization) -------------------
+async function bootstrapApp() {
+  if (state) return;
+  dayjs.extend(window.dayjs_plugin_utc);
+  dayjs.extend(window.dayjs_plugin_timezone);
+  state = loadState();
+  if (!state.settings.baseDate) {
+    state.settings.baseDate = dayjs().tz(state.settings.timezone).format('YYYY-MM-DD');
+  }
+  await initializeData();
+  renderUI();
+  readyPromise.resolve(state);
+  window.addEventListener(UPDATE_EVENT, renderUI);
+  console.log("LunchVote+ 中央電腦 (v1.3-final) 已啟動。");
+}
+
+document.addEventListener('DOMContentLoaded', bootstrapApp);
+
 
 // ------------------- 核心功能導出 (Export Core Functions) -------------------
 function getSettings() { return state.settings; }
@@ -218,10 +237,9 @@ function getVoteSummary(date) {
     });
     return Object.values(summary);
 }
-// ... 其他所有你需要用到的函數 ...
 
-// *** 【關鍵修復】導出所有需要的函數，包含 PIN ***
 export {
+    bootstrapApp, // <--- 【最終修正】把啟動鑰匙加回來
     whenReady,
     getSettings,
     updateSettings,
@@ -238,25 +256,6 @@ export {
     recordVote,
     getVotes,
     getVoteSummary,
-    setPin,       // <--- 核心修復
-    verifyPin,    // <--- 核心修復
-    // (此處省略了其他未用到的函數，例如 saveDataToServer 等，你可以根據需要自行加入)
+    setPin,
+    verifyPin,
 };
-
-// ------------------- 應用程式初始化 (App Initialization) -------------------
-async function bootstrapApp() {
-  if (state) return;
-  dayjs.extend(window.dayjs_plugin_utc);
-  dayjs.extend(window.dayjs_plugin_timezone);
-  state = loadState();
-  if (!state.settings.baseDate) {
-    state.settings.baseDate = dayjs().tz(state.settings.timezone).format('YYYY-MM-DD');
-  }
-  await initializeData();
-  renderUI();
-  readyPromise.resolve(state);
-  window.addEventListener(UPDATE_EVENT, renderUI);
-  console.log("LunchVote+ 中央電腦 (v1.2-stable) 已啟動。");
-}
-
-document.addEventListener('DOMContentLoaded', bootstrapApp);
