@@ -1,10 +1,10 @@
-// [請完整複製以下所有程式碼，並覆蓋你專案中的 app.js 檔案]
+// [最終修正版 v2.1 - 請完整複製並覆蓋 app.js]
 
 const STORAGE_KEY = 'lunchvote-plus';
 const UPDATE_EVENT = 'lunchvote:update';
 const PHASE_EVENT = 'lunchvote:phase';
 
-// ------------------- 預設狀態 (Default State) -------------------
+// --- 預設狀態 (Default State) ---
 const DEFAULT_STATE = {
   settings: {
     mode: 'vote',
@@ -22,17 +22,18 @@ const DEFAULT_STATE = {
   orders: {},
 };
 
-// ------------------- 全域變數 (Global Variables) -------------------
+// --- 全域變數 (Global Variables) ---
 let state = null;
 const readyPromise = new Promise((resolve) => {
   readyPromise.resolve = resolve;
 });
 
-function whenReady() { // <--- 我們在這裡正式賦予它一個名份
+// 【v2.1 修正】明確定義 whenReady 為一個可導出的函式
+function whenReady() {
   return readyPromise;
 }
 
-// ------------------- 狀態管理 (State Management) -------------------
+// --- 狀態管理 (State Management) ---
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
@@ -55,7 +56,7 @@ function persistState(triggerEvent = true) {
   }
 }
 
-// ------------------- 資料初始化 (Data Initialization) -------------------
+// --- 資料初始化 (Data Initialization) ---
 async function fetchJSON(url) {
     try {
         const response = await fetch(url);
@@ -81,12 +82,12 @@ async function initializeData() {
     }
 }
 
-// ------------------- 時間與階段邏輯 (Time & Phase Logic) -------------------
+// --- 時間與階段邏輯 (Time & Phase Logic) ---
 function getActiveDate() {
   return state.settings.baseDate;
 }
 
-// ------------------- PIN 碼驗證邏輯 -------------------
+// --- PIN 碼驗證邏輯 ---
 async function simpleHash(str) {
   if (!str || typeof str !== 'string') return '';
   const buffer = new TextEncoder().encode(str);
@@ -125,7 +126,7 @@ async function verifyPin(pin) {
   }
 }
 
-// ------------------- UI 渲染 (UI Rendering) -------------------
+// --- UI 渲染 (UI Rendering) ---
 function renderNameOptions(selectElement) {
   if (!selectElement) return;
   const currentValue = selectElement.value;
@@ -166,7 +167,7 @@ function renderUI() {
   renderRestaurantOptions();
 }
 
-// ------------------- 應用程式初始化 (App Initialization) -------------------
+// --- 應用程式初始化 (App Initialization) ---
 async function bootstrapApp() {
   if (state) return;
   dayjs.extend(window.dayjs_plugin_utc);
@@ -179,13 +180,12 @@ async function bootstrapApp() {
   renderUI();
   readyPromise.resolve(state);
   window.addEventListener(UPDATE_EVENT, renderUI);
-  console.log("LunchVote+ 中央電腦 (v1.3-final) 已啟動。");
+  console.log("LunchVote+ 中央電腦 (v2.1-stable) 已啟動。");
 }
 
 document.addEventListener('DOMContentLoaded', bootstrapApp);
 
-
-// ------------------- 核心功能導出 (Export Core Functions) -------------------
+// --- 核心功能導出 (Export Core Functions) ---
 function getSettings() { return state.settings; }
 function updateSettings(newSettings) {
   state.settings = { ...state.settings, ...newSettings };
@@ -242,7 +242,7 @@ function getVoteSummary(date) {
 }
 
 export {
-    bootstrapApp, // <--- 【最終修正】把啟動鑰匙加回來
+    bootstrapApp,
     whenReady,
     getSettings,
     updateSettings,
