@@ -23,6 +23,8 @@ const adminPage = document.querySelector('[data-page="admin"]');
 
 if (adminPage) {
   bootstrapApp();
+  
+  // --- DOM Elements ---
   const pinModal = document.getElementById('pinModal');
   const pinForm = document.getElementById('pinForm');
   const pinInput = document.getElementById('pinInput');
@@ -37,9 +39,7 @@ if (adminPage) {
   const importCsvInput = document.getElementById('importCsv');
   const restaurantsList = document.getElementById('restaurantsList');
   const restaurantForm = document.getElementById('restaurantForm');
-  const menuSelect = document.getElementById('menuRestaurantSelect');
-  const menuList = document.getElementById('menuList');
-  const addMenuItemBtn = document.getElementById('addMenuItem');
+  const restaurantSelect = document.getElementById('restaurantSelect');
   const backupToggle = document.getElementById('backupToggle');
   const backupUrlInput = document.getElementById('backupUrl');
   const backupNowBtn = document.getElementById('backupNow');
@@ -50,68 +50,112 @@ if (adminPage) {
   const wizardCanvas = document.getElementById('wizardCanvas');
   const wizardDownloadBtn = document.getElementById('downloadPoster');
 
-  let activeMenuItems = [];
+  // v2.0 Menu Editor Elements
+  const menuEditorV2 = document.getElementById('menuEditorV2');
+  const categoryForm = document.getElementById('categoryForm');
+  const categoryNameInput = document.getElementById('categoryName');
+  const categoryContainer = document.getElementById('categoryContainer');
+  
+  // v2.0 Item Editor Modal Elements
+  const itemEditorModal = document.getElementById('itemEditorModal');
+  const itemEditorForm = document.getElementById('itemEditorForm');
+  const modalTitle = document.getElementById('modalTitle');
+  const optionGroupsContainer = document.getElementById('optionGroupsContainer');
+  const addOptionGroupBtn = document.getElementById('addOptionGroupBtn');
+
+  // --- State ---
   let activeRestaurantId = '';
+  let activeMenu = {};
+  const state = { wizardStep: 1 };
 
-  const state = {
-    wizardStep: 1
-  };
+  // --- General Functions ---
+  function showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('visible'));
+    setTimeout(() => {
+      toast.classList.remove('visible');
+      setTimeout(() => toast.remove(), 300);
+    }, 2500);
+  }
 
+  // --- PIN Authentication ---
   function showPinModal() {
+    // This function might need to dynamically create the pin form if it's not in the HTML initially
+    if (!pinModal.innerHTML.trim()) {
+        pinModal.innerHTML = `
+        <div class="modal-content">
+            <div id="setPinPanel" class="hidden">
+                <h2>首次設定 PIN</h2>
+                <form id="setPinForm">
+                    <input type="password" id="newPin" placeholder="請設定 4 位以上 PIN" required>
+                    <input type="password" id="confirmPin" placeholder="再次確認 PIN" required>
+                    <button type="submit">設定</button>
+                    <p id="setPinError" class="error"></p>
+                </form>
+            </div>
+            <form id="pinForm">
+                <h2>請輸入管理 PIN</h2>
+                <input type="password" id="pinInput" required>
+                <button type="submit">解鎖</button>
+                <p id="pinError" class="error"></p>
+            </form>
+        </div>`;
+    }
     pinModal.classList.remove('hidden');
-    pinInput.focus();
+    pinModal.querySelector('#pinInput').focus();
   }
-
-  function hidePinModal() {
-    pinModal.classList.add('hidden');
-  }
+  function hidePinModal() { pinModal.classList.add('hidden'); }
 
   async function handlePinSubmit(event) {
     event.preventDefault();
-    const pin = pinInput.value.trim();
+    const pin = pinModal.querySelector('#pinInput').value.trim();
     const result = await verifyPin(pin);
     if (result.ok) {
       if (result.reason === 'not_set') {
-        document.getElementById('setPinPanel').classList.remove('hidden');
-        pinForm.classList.add('hidden');
-        newPinInput.focus();
+        pinModal.querySelector('#setPinPanel').classList.remove('hidden');
+        pinModal.querySelector('#pinForm').classList.add('hidden');
+        pinModal.querySelector('#newPin').focus();
       } else {
         hidePinModal();
       }
-    } else if (result.reason === 'locked') {
-      pinError.textContent = `已鎖定，請於 ${new Date(result.unlockAt).toLocaleTimeString()} 再試。`;
     } else {
-      pinError.textContent = '密碼錯誤，請再試一次。';
+      const pinErrorEl = pinModal.querySelector('#pinError');
+      pinErrorEl.textContent = result.reason === 'locked' ? `已鎖定，請於 ${new Date(result.unlockAt).toLocaleTimeString()} 再試。` : '密碼錯誤，請再試一次。';
     }
-    pinForm.reset();
+    event.target.reset();
   }
 
-  setPinForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const pin = newPinInput.value.trim();
-    if (pin.length < 4) {
-      setPinError.textContent = 'PIN 至少 4 位數。';
-      return;
+  pinModal.addEventListener('submit', async (event) => {
+    if (event.target.id === 'setPinForm') {
+        event.preventDefault();
+        const newPin = pinModal.querySelector('#newPin').value.trim();
+        const confirmPin = pinModal.querySelector('#confirmPin').value.trim();
+        const setPinErrorEl = pinModal.querySelector('#setPinError');
+        if (newPin.length < 4) { setPinErrorEl.textContent = 'PIN 至少 4 位數。'; return; }
+        if (newPin !== confirmPin) { setPinErrorEl.textContent = '兩次輸入不一致。'; return; }
+        await setPin(newPin);
+        pinModal.querySelector('#setPinPanel').classList.add('hidden');
+        pinModal.querySelector('#pinForm').classList.remove('hidden');
+        hidePinModal();
+        showToast('已設定 PIN');
+    } else if (event.target.id === 'pinForm') {
+        handlePinSubmit(event);
     }
-    if (pin !== confirmPinInput.value.trim()) {
-      setPinError.textContent = '兩次輸入不一致。';
-      return;
-    }
-    await setPin(pin);
-    document.getElementById('setPinPanel').classList.add('hidden');
-    pinForm.classList.remove('hidden');
-    hidePinModal();
-    showToast('已設定 PIN');
   });
 
+
+  // --- Settings, Names, Backup (Unchanged Logic)---
   function populateSettings() {
     const settings = getSettings();
-    settingsForm.mode.value = settings.mode;
-    settingsForm.baseDate.value = settings.baseDate;
-    settingsForm.timezone.value = settings.timezone;
-    settingsForm.requiresPreorder.checked = !!settings.requiresPreorder;
-    backupToggle.checked = !!settings.backup?.enabled;
-    backupUrlInput.value = settings.backup?.url || '';
+    if(settingsForm && 'mode' in settingsForm) settingsForm.mode.value = settings.mode;
+    if(settingsForm && 'baseDate' in settingsForm) settingsForm.baseDate.value = settings.baseDate;
+    if(settingsForm && 'timezone' in settingsForm) settingsForm.timezone.value = settings.timezone;
+    if(settingsForm && 'requiresPreorder' in settingsForm) settingsForm.requiresPreorder.checked = !!settings.requiresPreorder;
+    if(backupToggle) backupToggle.checked = !!settings.backup?.enabled;
+    if(backupUrlInput) backupUrlInput.value = settings.backup?.url || '';
   }
 
   function renderNames() {
@@ -126,7 +170,6 @@ if (adminPage) {
       li.querySelector('button').addEventListener('click', () => {
         if (confirm(`確定刪除 ${name}？`)) {
           removeName(name);
-          renderNames();
         }
       });
       namesList.appendChild(li);
@@ -136,13 +179,9 @@ if (adminPage) {
   function handleNamesImport() {
     const text = namesTextarea.value.trim();
     if (!text) return;
-    const names = text
-      .split(/\r?\n|,|\s/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const names = text.split(/\r?\n|,|\s/).map((item) => item.trim()).filter(Boolean);
     addNames(names);
     namesTextarea.value = '';
-    renderNames();
     showToast('已匯入名單');
   }
 
@@ -154,12 +193,12 @@ if (adminPage) {
       const text = e.target.result;
       const lines = String(text).split(/\r?\n/).filter(Boolean);
       addNames(lines.map((line) => line.split(',')[0].trim()));
-      renderNames();
       showToast('CSV 名單匯入完成');
     };
     reader.readAsText(file, 'utf-8');
   }
 
+  // --- Restaurant Management (Updated) ---
   function renderRestaurants() {
     const restaurants = getRestaurants(true);
     restaurantsList.innerHTML = '';
@@ -172,339 +211,267 @@ if (adminPage) {
           <p>${restaurant.requiresPreorder ? '需預訂' : '免預訂'} · ${restaurant.status === 'open' ? '營業中' : restaurant.status === 'soldout' ? '售完' : '停售'}</p>
         </div>
         <div class="actions">
-          <button type="button" data-action="menu" data-id="${restaurant.id}">菜單</button>
           <button type="button" data-action="toggle" data-id="${restaurant.id}">${restaurant.status === 'open' ? '停售' : '開啟'}</button>
           <button type="button" data-action="soldout" data-id="${restaurant.id}">${restaurant.status === 'soldout' ? '恢復' : '標記售完'}</button>
           <button type="button" data-action="delete" data-id="${restaurant.id}">刪除</button>
         </div>
       `;
-      item.querySelector('[data-action="menu"]').addEventListener('click', () => {
-        activeRestaurantId = restaurant.id;
-        populateMenuEditor();
-        menuSelect.value = restaurant.id;
-      });
       item.querySelector('[data-action="toggle"]').addEventListener('click', () => {
         const nextStatus = restaurant.status === 'open' ? 'closed' : 'open';
         upsertRestaurant({ ...restaurant, status: nextStatus });
-        renderRestaurants();
       });
       item.querySelector('[data-action="soldout"]').addEventListener('click', () => {
         const nextStatus = restaurant.status === 'soldout' ? 'open' : 'soldout';
         upsertRestaurant({ ...restaurant, status: nextStatus });
-        renderRestaurants();
       });
       item.querySelector('[data-action="delete"]').addEventListener('click', () => {
-        if (confirm('確定刪除餐廳？')) {
+        if (confirm('確定刪除餐廳？其所有菜單將一併刪除。')) {
           removeRestaurant(restaurant.id);
-          renderRestaurants();
         }
       });
       restaurantsList.appendChild(item);
     });
   }
+  
+  if (restaurantForm) {
+    restaurantForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const name = event.target.name.value.trim();
+        if (!name) return;
+        const newRestaurant = {
+        id: name.replace(/\s+/g, '_') + '_' + Date.now(),
+        name,
+        requiresPreorder: event.target.requiresPreorder.checked,
+        status: 'open'
+        };
+        upsertRestaurant(newRestaurant);
+        setMenu(newRestaurant.id, { name, categories: [], items: [] });
+        event.target.reset();
+        showToast('餐廳已新增');
+    });
+  }
 
-  restaurantForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const formData = new FormData(restaurantForm);
-    const id = String(formData.get('id') || '').trim() || crypto.randomUUID();
-    const name = String(formData.get('name') || '').trim();
-    const requiresPreorder = formData.get('requiresPreorder') === 'on';
-    if (!name) {
-      showToast('請輸入餐廳名稱');
-      return;
-    }
-    upsertRestaurant({ id, name, requiresPreorder, status: 'open' });
-    restaurantForm.reset();
-    renderRestaurants();
-    populateMenuSelector();
-    showToast('已新增餐廳');
-  });
 
-  function populateMenuSelector() {
+  function populateRestaurantSelector() {
     const restaurants = getRestaurants(true);
-    menuSelect.innerHTML = '<option value="">選擇餐廳</option>';
-    restaurants.forEach((restaurant) => {
+    const currentValue = restaurantSelect.value;
+    restaurantSelect.innerHTML = '<option value="">請選擇要編輯的餐廳</option>';
+    restaurants.forEach((r) => {
       const option = document.createElement('option');
-      option.value = restaurant.id;
-      option.textContent = restaurant.name;
-      menuSelect.appendChild(option);
+      option.value = r.id;
+      option.textContent = r.name;
+      restaurantSelect.appendChild(option);
     });
-    if (activeRestaurantId) {
-      menuSelect.value = activeRestaurantId;
+    if (restaurants.find(r => r.id === currentValue)) {
+      restaurantSelect.value = currentValue;
+    } else {
+      activeRestaurantId = '';
+      menuEditorV2.classList.add('hidden');
     }
   }
 
-  function populateMenuEditor() {
-    const menus = getMenus();
+  // --- Menu Editor v2.0 (New Logic) ---
+  function initializeMenuEditor() {
+    activeRestaurantId = restaurantSelect.value;
     if (!activeRestaurantId) {
-      menuList.innerHTML = '<p class="empty">請選擇餐廳</p>';
+      menuEditorV2.classList.add('hidden');
       return;
     }
-    const menu = menus[activeRestaurantId];
-    activeMenuItems = menu?.items ? [...menu.items] : [];
-    renderMenuItems();
+    const menus = getMenus();
+    activeMenu = menus[activeRestaurantId] || { name: getRestaurants().find(r=>r.id === activeRestaurantId)?.name, categories: [], items: [] };
+    if (!activeMenu.categories) activeMenu.categories = [];
+    if (!activeMenu.items) activeMenu.items = [];
+    menuEditorV2.classList.remove('hidden');
+    renderCategoriesAndItems();
   }
 
-  function renderMenuItems() {
-    if (!activeMenuItems.length) {
-      menuList.innerHTML = '<p class="empty">尚未設定菜單</p>';
-      return;
+  function renderCategoriesAndItems() {
+    categoryContainer.innerHTML = '';
+    if (!activeMenu.categories || activeMenu.categories.length === 0) {
+        categoryContainer.innerHTML = '<p class="empty" style="padding: 1rem; text-align: center;">尚未新增分類。</p>';
     }
-    menuList.innerHTML = '';
-    activeMenuItems.forEach((item, index) => {
-      const row = document.createElement('div');
-      row.className = 'menu-row';
-      row.innerHTML = `
-        <input type="text" value="${item.name}" data-field="name" data-index="${index}" />
-        <input type="number" value="${item.price}" min="0" data-field="price" data-index="${index}" />
-        <label class="toggle">
-          <input type="checkbox" data-field="available" data-index="${index}" ${item.available ? 'checked' : ''} />
-          <span>可售</span>
-        </label>
-        <button type="button" data-action="remove" data-index="${index}">刪除</button>
-      `;
-      row.querySelector('[data-field="name"]').addEventListener('input', (event) => {
-        activeMenuItems[index].name = event.target.value;
-        persistMenu();
-      });
-      row.querySelector('[data-field="price"]').addEventListener('input', (event) => {
-        activeMenuItems[index].price = Number(event.target.value || 0);
-        persistMenu();
-      });
-      row.querySelector('[data-field="available"]').addEventListener('change', (event) => {
-        activeMenuItems[index].available = event.target.checked;
-        persistMenu();
-      });
-      row.querySelector('[data-action="remove"]').addEventListener('click', () => {
-        activeMenuItems.splice(index, 1);
-        persistMenu();
-        renderMenuItems();
-      });
-      menuList.appendChild(row);
+    activeMenu.categories.forEach(category => {
+      const categoryEl = document.createElement('div');
+      categoryEl.className = 'category-block';
+      categoryEl.innerHTML = `<div class="category-header"><h3>${category.name}</h3><div><button type="button" class="ghost" data-action="addItem" data-category-id="${category.id}">新增品項</button><button type="button" class="danger" data-action="deleteCategory" data-category-id="${category.id}">刪除分類</button></div></div><div class="item-list"></div>`;
+      const itemListEl = categoryEl.querySelector('.item-list');
+      const itemsInCategory = activeMenu.items.filter(item => item.categoryId === category.id);
+      if(itemsInCategory.length > 0) {
+        itemsInCategory.forEach(item => {
+          const itemEl = document.createElement('div');
+          itemEl.className = 'item-row';
+          itemEl.innerHTML = `<span>${item.name} - $${item.basePrice}</span><div><button type="button" data-action="editItem" data-item-id="${item.id}">編輯</button><button type="button" class="danger" data-action="deleteItem" data-item-id="${item.id}">刪除</button></div>`;
+          itemListEl.appendChild(itemEl);
+        });
+      } else {
+        itemListEl.innerHTML = '<p class="empty">此分類下尚無品項</p>';
+      }
+      categoryContainer.appendChild(categoryEl);
     });
   }
 
-  function persistMenu() {
+  categoryForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = categoryNameInput.value.trim();
+    if (!name || !activeRestaurantId) return;
+    const newCategory = { id: 'cat_' + Date.now(), name: name };
+    activeMenu.categories.push(newCategory);
+    persistActiveMenu();
+    categoryNameInput.value = '';
+    showToast('分類已新增');
+  });
+  
+  categoryContainer.addEventListener('click', (e) => {
+      const action = e.target.dataset.action;
+      if (!action) return;
+      if (action === 'deleteCategory') {
+          if (confirm('確定刪除此分類？分類下的所有品項也會一併刪除！')) {
+              const categoryId = e.target.dataset.categoryId;
+              activeMenu.categories = activeMenu.categories.filter(c => c.id !== categoryId);
+              activeMenu.items = activeMenu.items.filter(i => i.categoryId !== categoryId);
+              persistActiveMenu();
+              showToast('分類已刪除');
+          }
+      } else if (action === 'addItem') {
+          openItemEditorModal(null, e.target.dataset.categoryId);
+      } else if (action === 'editItem') {
+          const item = activeMenu.items.find(i => i.id === e.target.dataset.itemId);
+          openItemEditorModal(item, item.categoryId);
+      } else if (action === 'deleteItem') {
+          if (confirm('確定刪除此品項？')) {
+              activeMenu.items = activeMenu.items.filter(i => i.id !== e.target.dataset.itemId);
+              persistActiveMenu();
+              showToast('品項已刪除');
+          }
+      }
+  });
+
+  function openItemEditorModal(item, categoryId) {
+    itemEditorForm.reset();
+    itemEditorForm.itemId.value = item ? item.id : '';
+    itemEditorForm.categoryId.value = categoryId;
+    modalTitle.textContent = item ? '編輯品項' : '新增品項';
+    if (item) {
+        itemEditorForm.name.value = item.name;
+        itemEditorForm.basePrice.value = item.basePrice;
+        itemEditorForm.unit.value = item.unit || '';
+        itemEditorForm.imageUrl.value = item.imageUrl || '';
+    }
+    renderOptionGroups(item ? item.optionGroups : []);
+    itemEditorModal.classList.remove('hidden');
+  }
+
+  function renderOptionGroups(groups = []) {
+      optionGroupsContainer.innerHTML = '';
+      groups.forEach((group, index) => {
+          const groupEl = document.createElement('div');
+          groupEl.className = 'option-group-editor';
+          groupEl.innerHTML = `<div class="group-header"><input type="text" value="${group.name}" placeholder="群組名稱 (e.g., 尺寸)" data-group-index="${index}" data-field="name"><select data-group-index="${index}" data-field="type"><option value="single" ${group.type === 'single' ? 'selected' : ''}>單選</option><option value="multiple" ${group.type === 'multiple' ? 'selected' : ''}>多選</option></select><button type="button" class="danger" data-action="deleteGroup" data-group-index="${index}">刪除群組</button></div><div class="options-container"></div><button type="button" class="ghost" data-action="addOption" data-group-index="${index}">新增選項</button>`;
+          const optionsContainer = groupEl.querySelector('.options-container');
+          group.options.forEach((option, optIndex) => {
+              const optionEl = document.createElement('div');
+              optionEl.className = 'option-editor';
+              optionEl.innerHTML = `<input type="text" value="${option.name}" placeholder="選項名稱" data-group-index="${index}" data-option-index="${optIndex}" data-field="optionName"><input type="number" value="${option.priceAdjustment || 0}" placeholder="價格調整" data-group-index="${index}" data-option-index="${optIndex}" data-field="priceAdjustment"><button type="button" class="danger" data-action="deleteOption" data-group-index="${index}" data-option-index="${optIndex}">×</button>`;
+              optionsContainer.appendChild(optionEl);
+          });
+          optionGroupsContainer.appendChild(groupEl);
+      });
+  }
+
+  addOptionGroupBtn.addEventListener('click', () => {
+    const currentGroups = collectOptionGroupsFromDOM();
+    currentGroups.push({ name: '', type: 'single', options: [{ name: '', priceAdjustment: 0 }] });
+    renderOptionGroups(currentGroups);
+  });
+  
+  optionGroupsContainer.addEventListener('click', (e) => {
+      const action = e.target.dataset.action;
+      if (!action) return;
+      let currentGroups = collectOptionGroupsFromDOM();
+      if (action === 'deleteGroup') currentGroups.splice(e.target.dataset.groupIndex, 1);
+      else if (action === 'addOption') currentGroups[e.target.dataset.groupIndex].options.push({ name: '', priceAdjustment: 0 });
+      else if (action === 'deleteOption') currentGroups[e.target.dataset.groupIndex].options.splice(e.target.dataset.optionIndex, 1);
+      renderOptionGroups(currentGroups);
+  });
+  
+  function collectOptionGroupsFromDOM() {
+      const groups = [];
+      optionGroupsContainer.querySelectorAll('.option-group-editor').forEach((groupEl, groupIndex) => {
+          const group = { name: groupEl.querySelector(`[data-group-index="${groupIndex}"][data-field="name"]`).value, type: groupEl.querySelector(`[data-group-index="${groupIndex}"][data-field="type"]`).value, options: [] };
+          groupEl.querySelectorAll('.option-editor').forEach((optionEl, optionIndex) => {
+              group.options.push({ name: optionEl.querySelector(`[data-option-index="${optionIndex}"][data-field="optionName"]`).value, priceAdjustment: Number(optionEl.querySelector(`[data-option-index="${optionIndex}"][data-field="priceAdjustment"]`).value) || 0 });
+          });
+          groups.push(group);
+      });
+      return groups;
+  }
+
+  itemEditorForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const formData = new FormData(itemEditorForm);
+      const itemId = formData.get('itemId') || 'item_' + Date.now();
+      const newItemData = {
+          id: itemId,
+          categoryId: formData.get('categoryId'),
+          name: formData.get('name').trim(),
+          basePrice: Number(formData.get('basePrice')),
+          unit: formData.get('unit').trim(),
+          imageUrl: formData.get('imageUrl').trim(),
+          optionGroups: collectOptionGroupsFromDOM().filter(g => g.name)
+      };
+      const itemIndex = activeMenu.items.findIndex(i => i.id === itemId);
+      if (itemIndex > -1) activeMenu.items[itemIndex] = newItemData;
+      else activeMenu.items.push(newItemData);
+      persistActiveMenu();
+      itemEditorModal.classList.add('hidden');
+      showToast('品項已儲存');
+  });
+  
+  function persistActiveMenu() {
     if (!activeRestaurantId) return;
-    setMenu(activeRestaurantId, {
-      name: getRestaurants(true).find((r) => r.id === activeRestaurantId)?.name || '',
-      items: activeMenuItems
-    });
+    setMenu(activeRestaurantId, activeMenu);
   }
-
-  addMenuItemBtn?.addEventListener('click', () => {
-    if (!menuSelect.value) {
-      showToast('請先選擇餐廳');
-      return;
-    }
-    activeRestaurantId = menuSelect.value;
-    activeMenuItems.push({ id: crypto.randomUUID(), name: '新菜品', price: 100, available: true });
-    persistMenu();
-    renderMenuItems();
-  });
-
-  menuSelect?.addEventListener('change', () => {
-    activeRestaurantId = menuSelect.value;
-    populateMenuEditor();
-  });
-
-  backupToggle?.addEventListener('change', () => {
-    updateSettings({
-      backup: {
-        ...getSettings().backup,
-        enabled: backupToggle.checked,
-        url: backupUrlInput.value
-      }
+  
+  function setupEventListeners() {
+    document.getElementById('importNamesBtn')?.addEventListener('click', handleNamesImport);
+    importCsvInput?.addEventListener('change', handleCsvImport);
+    namesTextarea?.addEventListener('keydown', (event) => { if (event.metaKey && event.key === 'Enter') handleNamesImport(); });
+    settingsForm?.addEventListener('change', () => {
+        const formData = new FormData(settingsForm);
+        updateSettings({ mode: formData.get('mode'), baseDate: formData.get('baseDate'), timezone: formData.get('timezone'), requiresPreorder: formData.get('requiresPreorder') === 'on' });
+        showToast('設定已儲存');
     });
-    showToast('已更新備份設定');
-  });
-
-  backupUrlInput?.addEventListener('blur', () => {
-    updateSettings({
-      backup: {
-        ...getSettings().backup,
-        enabled: backupToggle.checked,
-        url: backupUrlInput.value
-      }
-    });
-  });
-
-  backupNowBtn?.addEventListener('click', async () => {
-    try {
-      await saveDataToServer();
-      showToast('備份完成');
-    } catch (error) {
-      showToast('備份失敗，請檢查設定');
-    }
-  });
-
-  restoreBtn?.addEventListener('click', async () => {
-    if (!confirm('確認從備份還原？目前資料將被覆蓋。')) return;
-    try {
-      const ok = await loadDataFromServer();
-      if (ok) {
-        populateSettings();
+    backupToggle?.addEventListener('change', () => updateSettings({ backup: { ...getSettings().backup, enabled: backupToggle.checked }}));
+    backupUrlInput?.addEventListener('blur', () => updateSettings({ backup: { ...getSettings().backup, url: backupUrlInput.value }}));
+    backupNowBtn?.addEventListener('click', async () => { try { await saveDataToServer(); showToast('備份完成'); } catch (error) { showToast('備份失敗'); }});
+    restoreBtn?.addEventListener('click', async () => { if (confirm('確認從備份還原？目前資料將被覆蓋。')) { try { await loadDataFromServer(); showToast('還原完成'); } catch (error) { showToast('還原失敗'); }}});
+    clearOldBtn?.addEventListener('click', () => { if (confirm('確定清除 30 天前資料？') && confirm('再次確認：舊資料將無法復原。')) { clearOldRecords(30); showToast('已清除舊資料'); }});
+    wizardStartBtn?.addEventListener('click', startWizard);
+    wizardDownloadBtn?.addEventListener('click', () => { const link = document.createElement('a'); link.href = wizardCanvas.toDataURL('image/png'); link.download = `LunchVote_poster_${getActiveDate()}.png`; link.click(); });
+    restaurantSelect.addEventListener('change', initializeMenuEditor);
+    window.addEventListener('lunchvote:update', () => {
         renderNames();
         renderRestaurants();
-        populateMenuSelector();
-        populateMenuEditor();
-        showToast('還原完成');
-      }
-    } catch (error) {
-      showToast('還原失敗');
-    }
-  });
-
-  clearOldBtn?.addEventListener('click', () => {
-    if (confirm('確定清除 30 天前資料？') && confirm('再次確認：舊資料將無法復原。')) {
-      clearOldRecords(30);
-      showToast('已清除舊資料');
-    }
-  });
-
-  settingsForm?.addEventListener('change', () => {
-    const formData = new FormData(settingsForm);
-    updateSettings({
-      mode: formData.get('mode'),
-      baseDate: formData.get('baseDate'),
-      timezone: formData.get('timezone'),
-      requiresPreorder: formData.get('requiresPreorder') === 'on'
-    });
-    showToast('設定已儲存');
-  });
-
-  namesTextarea?.addEventListener('keydown', (event) => {
-    if (event.metaKey && event.key === 'Enter') {
-      handleNamesImport();
-    }
-  });
-
-  document.getElementById('importNamesBtn')?.addEventListener('click', handleNamesImport);
-  importCsvInput?.addEventListener('change', handleCsvImport);
-
-  function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('visible'));
-    setTimeout(() => {
-      toast.classList.remove('visible');
-      setTimeout(() => toast.remove(), 300);
-    }, 2500);
-  }
-
-  function startWizard() {
-    wizard.classList.remove('hidden');
-    state.wizardStep = 1;
-    renderWizard();
-  }
-
-  function renderWizard() {
-    wizard.querySelectorAll('.wizard-step').forEach((step) => {
-      step.classList.toggle('active', Number(step.dataset.step) === state.wizardStep);
+        populateRestaurantSelector();
+        if (activeRestaurantId) renderCategoriesAndItems();
     });
   }
 
-  wizard?.addEventListener('click', (event) => {
-    if (event.target.matches('[data-next]')) {
-      state.wizardStep = Math.min(3, state.wizardStep + 1);
-      renderWizard();
-      if (state.wizardStep === 3) {
-        drawPoster();
-      }
-    }
-    if (event.target.matches('[data-prev]')) {
-      state.wizardStep = Math.max(1, state.wizardStep - 1);
-      renderWizard();
-    }
-  });
-
-  function drawPoster() {
-    const canvas = wizardCanvas;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = '#3a6ff7';
-    ctx.fillRect(0, 0, width, 120);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px "Noto Sans TC"';
-    ctx.fillText('LunchVote+ 掃描投票', 40, 80);
-    ctx.fillStyle = '#222';
-    ctx.font = '18px "Noto Sans TC"';
-    ctx.fillText('老師 5 分鐘上線、每天省 20 分鐘統計', 40, 150);
-    const date = getActiveDate();
-    const url = `${location.origin}${location.pathname.replace('admin.html', '')}index.html?d=${date}`;
-    drawPseudoQr(ctx, url, width - 260, height / 2 - 120, 220);
-    ctx.fillText('掃描上方 QR 立即投票/點餐', 40, height - 80);
-    ctx.fillText('讓午餐變簡單，一鍵投票、一鍵下單、一鍵交接', 40, height - 40);
-  }
-
-  function drawPseudoQr(ctx, text, x, y, size) {
-    const bits = pseudoQrMatrix(text, 29);
-    const cell = size / bits.length;
-    ctx.fillStyle = '#000';
-    bits.forEach((row, r) => {
-      row.forEach((bit, c) => {
-        if (bit) {
-          ctx.fillRect(x + c * cell, y + r * cell, cell, cell);
-        }
-      });
-    });
-  }
-
-  function pseudoQrMatrix(text, dimension) {
-    const bits = Array.from({ length: dimension }, () => Array(dimension).fill(0));
-    let hash = 0;
-    for (let i = 0; i < text.length; i += 1) {
-      hash = (hash * 33 + text.charCodeAt(i)) % 0xffffff;
-    }
-    for (let r = 0; r < dimension; r += 1) {
-      for (let c = 0; c < dimension; c += 1) {
-        const value = (hash + r * dimension + c * 7) % 37;
-        bits[r][c] = value % 2 === 0 ? 1 : 0;
-      }
-    }
-    // add finder patterns
-    fillFinder(bits, 0, 0);
-    fillFinder(bits, 0, dimension - 7);
-    fillFinder(bits, dimension - 7, 0);
-    return bits;
-  }
-
-  function fillFinder(bits, row, col) {
-    for (let r = 0; r < 7; r += 1) {
-      for (let c = 0; c < 7; c += 1) {
-        const edge = r === 0 || c === 0 || r === 6 || c === 6;
-        const inner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-        bits[row + r][col + c] = edge || inner ? 1 : 0;
-      }
-    }
-  }
-
-  wizardDownloadBtn?.addEventListener('click', () => {
-    const link = document.createElement('a');
-    link.href = wizardCanvas.toDataURL('image/png');
-    link.download = `LunchVote_poster_${getActiveDate()}.png`;
-    link.click();
-  });
-
-  wizardStartBtn?.addEventListener('click', startWizard);
-
+  // --- Initialization ---
   whenReady().then(() => {
     populateSettings();
     renderNames();
     renderRestaurants();
-    populateMenuSelector();
-    populateMenuEditor();
-    const settings = getSettings();
-    if (!settings.baseDate || !getNames().length) {
-      startWizard();
+    populateRestaurantSelector();
+    setupEventListeners();
+    
+    if (!getSettings().pinHash) {
+        // First time setup
+        showPinModal();
+        pinModal.querySelector('#setPinPanel').classList.remove('hidden');
+        pinModal.querySelector('#pinForm').classList.add('hidden');
+    } else {
+        showPinModal();
     }
   });
-
-  pinForm?.addEventListener('submit', handlePinSubmit);
-  showPinModal();
 }
