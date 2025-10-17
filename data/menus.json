@@ -8,7 +8,6 @@
       { "id": "cat_side_dish", "name": "小菜類" }
     ],
     "items": [
-      // ==================== 麵類 ====================
       {
         "id": "item_comprehensive_noodle",
         "categoryId": "cat_noodle",
@@ -63,9 +62,6 @@
           }
         ]
       },
-      // ... 其他麵類可以比照辦理 ...
-
-      // ==================== 飯類 ====================
       {
         "id": "item_minced_pork_rice",
         "categoryId": "cat_rice",
@@ -83,24 +79,6 @@
         ]
       },
       {
-        "id": "item_white_rice",
-        "categoryId": "cat_rice",
-        "name": "白飯",
-        "basePrice": 10,
-        "imageUrl": "",
-        "optionGroups": [
-           {
-            "id": "size", "name": "份量", "type": "single",
-            "options": [
-              { "name": "小", "priceAdjustment": 0 },
-              { "name": "大", "priceAdjustment": 5 }
-            ]
-          }
-        ]
-      },
-
-      // ==================== 湯類 ====================
-      {
         "id": "item_pork_liver_soup",
         "categoryId": "cat_soup",
         "name": "豬肝湯",
@@ -108,38 +86,19 @@
         "imageUrl": "",
         "optionGroups": []
       },
-      // ... 其他湯類 ...
-
-      // ==================== 小菜類 ====================
       {
         "id": "item_preserved_egg_tofu",
         "categoryId": "cat_side_dish",
         "name": "皮蛋豆腐",
         "basePrice": 40,
         "imageUrl": "",
-        "optionGroups": [
-          {
-            "id": "size", "name": "份量", "type": "single",
-            "options": [
-              { "name": "小", "priceAdjustment": 0 },
-              { "name": "大", "priceAdjustment": 20 }
-            ]
-          }
-        ]
-      },
-      {
-        "id": "item_seaweed",
-        "categoryId": "cat_side_dish",
-        "name": "海帶",
-        "basePrice": 25,
-        "unit": "一份",
-        "imageUrl": "",
         "optionGroups": []
       }
-      // ... 其他小菜 ...
     ]
   },
   "FANG_YUN_CHI": {
-      // 這裡未來可以放方雲集的資料
+      "name": "八方雲集",
+      "categories": [],
+      "items": []
   }
 }
