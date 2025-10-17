@@ -1,26 +1,145 @@
 {
-  "TASTY_THAI": {
-    "name": "泰泰好吃",
+  "GINYIN_NOODLE": {
+    "name": "金銀麵",
+    "categories": [
+      { "id": "cat_noodle", "name": "麵類" },
+      { "id": "cat_rice", "name": "飯類" },
+      { "id": "cat_soup", "name": "湯類" },
+      { "id": "cat_side_dish", "name": "小菜類" }
+    ],
     "items": [
-      {"id": "basil_chicken", "name": "打拋雞飯", "price": 110, "available": true},
-      {"id": "green_curry", "name": "綠咖哩雞", "price": 120, "available": true},
-      {"id": "tofu", "name": "羅勒豆腐", "price": 105, "available": true}
+      // ==================== 麵類 ====================
+      {
+        "id": "item_comprehensive_noodle",
+        "categoryId": "cat_noodle",
+        "name": "綜合麵",
+        "basePrice": 35,
+        "imageUrl": "",
+        "optionGroups": [
+          {
+            "id": "size", "name": "份量", "type": "single",
+            "options": [
+              { "name": "小", "priceAdjustment": 0 },
+              { "name": "大", "priceAdjustment": 40 }
+            ]
+          },
+          {
+            "id": "style", "name": "作法", "type": "single",
+            "options": [
+              { "name": "湯", "priceAdjustment": 0 },
+              { "name": "乾", "priceAdjustment": 0 }
+            ]
+          },
+          {
+            "id": "noodle_type", "name": "麵體", "type": "single",
+            "options": [
+              { "name": "意麵", "priceAdjustment": 0 }, { "name": "油麵", "priceAdjustment": 0 },
+              { "name": "陽春麵", "priceAdjustment": 0 }, { "name": "粿仔", "priceAdjustment": 0 },
+              { "name": "米粉", "priceAdjustment": 0 }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "item_pork_liver_noodle",
+        "categoryId": "cat_noodle",
+        "name": "豬肝麵",
+        "basePrice": 75,
+        "imageUrl": "",
+        "optionGroups": [
+          {
+            "id": "style", "name": "作法", "type": "single",
+            "options": [
+              { "name": "湯", "priceAdjustment": 0 }, { "name": "乾", "priceAdjustment": 0 }
+            ]
+          },
+          {
+            "id": "noodle_type", "name": "麵體", "type": "single",
+            "options": [
+                { "name": "意麵", "priceAdjustment": 0 }, { "name": "油麵", "priceAdjustment": 0 },
+                { "name": "陽春麵", "priceAdjustment": 0 }, { "name": "粿仔", "priceAdjustment": 0 },
+                { "name": "米粉", "priceAdjustment": 0 }
+            ]
+          }
+        ]
+      },
+      // ... 其他麵類可以比照辦理 ...
+
+      // ==================== 飯類 ====================
+      {
+        "id": "item_minced_pork_rice",
+        "categoryId": "cat_rice",
+        "name": "肉燥飯",
+        "basePrice": 30,
+        "imageUrl": "",
+        "optionGroups": [
+          {
+            "id": "size", "name": "份量", "type": "single",
+            "options": [
+              { "name": "小", "priceAdjustment": 0 },
+              { "name": "大", "priceAdjustment": 10 }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "item_white_rice",
+        "categoryId": "cat_rice",
+        "name": "白飯",
+        "basePrice": 10,
+        "imageUrl": "",
+        "optionGroups": [
+           {
+            "id": "size", "name": "份量", "type": "single",
+            "options": [
+              { "name": "小", "priceAdjustment": 0 },
+              { "name": "大", "priceAdjustment": 5 }
+            ]
+          }
+        ]
+      },
+
+      // ==================== 湯類 ====================
+      {
+        "id": "item_pork_liver_soup",
+        "categoryId": "cat_soup",
+        "name": "豬肝湯",
+        "basePrice": 40,
+        "imageUrl": "",
+        "optionGroups": []
+      },
+      // ... 其他湯類 ...
+
+      // ==================== 小菜類 ====================
+      {
+        "id": "item_preserved_egg_tofu",
+        "categoryId": "cat_side_dish",
+        "name": "皮蛋豆腐",
+        "basePrice": 40,
+        "imageUrl": "",
+        "optionGroups": [
+          {
+            "id": "size", "name": "份量", "type": "single",
+            "options": [
+              { "name": "小", "priceAdjustment": 0 },
+              { "name": "大", "priceAdjustment": 20 }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "item_seaweed",
+        "categoryId": "cat_side_dish",
+        "name": "海帶",
+        "basePrice": 25,
+        "unit": "一份",
+        "imageUrl": "",
+        "optionGroups": []
+      }
+      // ... 其他小菜 ...
     ]
   },
-  "MAMA_TACOS": {
-    "name": "媽媽塔可",
-    "items": [
-      {"id": "al_pastor", "name": "墨西哥烤肉塔可", "price": 95, "available": true},
-      {"id": "veggie", "name": "蔬食塔可", "price": 90, "available": true},
-      {"id": "combo", "name": "塔可雙拼", "price": 120, "available": true}
-    ]
-  },
-  "HARVEST_BOWL": {
-    "name": "豐收碗",
-    "items": [
-      {"id": "chicken_bowl", "name": "香料雞胸碗", "price": 130, "available": true},
-      {"id": "vegan_bowl", "name": "溫沙拉蔬菜碗", "price": 125, "available": true},
-      {"id": "beef_bowl", "name": "照燒牛肉碗", "price": 135, "available": true}
-    ]
+  "FANG_YUN_CHI": {
+      // 這裡未來可以放方雲集的資料
   }
 }
