@@ -26,7 +26,6 @@
     </header>
 
     <main>
-      <!-- 投票區塊 -->
       <section class="card shell" data-section="vote">
         <header class="section-header">
           <h2>投票階段</h2>
@@ -43,7 +42,6 @@
         <ul id="voteResult" class="result-list"></ul>
       </section>
 
-      <!-- 點餐區塊 (暫時隱藏) -->
       <section class="card shell hidden" data-section="order">
         <header class="section-header">
           <h2>點餐階段</h2>
@@ -55,11 +53,9 @@
             <select id="user-select-order"></select>
           </div>
         </div>
-        <div id="menuCards" class="card-grid"></div>
-        <!-- 其他點餐相關元件 -->
+        <div id="menuContainer"></div>
       </section>
 
-      <!-- 結果區塊 (暫時隱藏) -->
       <section class="card shell hidden" data-section="result">
         <header class="section-header">
           <h2>結果總覽</h2>
@@ -68,6 +64,30 @@
         <pre id="resultSummary" class="summary-block"></pre>
       </section>
     </main>
+
+    <div id="itemOptionsModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="itemOptionsTitle"></h2>
+            <form id="itemOptionsForm">
+                <div id="itemOptionsContainer"></div>
+                <div class="quantity-control field-group">
+                    <label>數量</label>
+                    <div class="menu-actions">
+                        <button type="button" class="qty-btn" data-action="decrease">−</button>
+                        <span id="itemOptionsQty" class="qty-value">1</span>
+                        <button type="button" class="qty-btn" data-action="increase">+</button>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="ghost" id="cancelOptionsBtn">取消</button>
+                    <button type="submit" class="primary">
+                        <span>加入訂單</span>
+                        <span id="itemOptionsPrice"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <footer class="action-bar">
       <div class="totals">
@@ -90,5 +110,6 @@
 
     <script type="module" src="./app.js"></script>
     <script type="module" src="./vote.js"></script>
+    <script type="module" src="./order.js"></script>
   </body>
 </html>
