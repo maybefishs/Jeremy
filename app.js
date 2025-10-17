@@ -1,10 +1,10 @@
-// [最終還原版 v4.0 - 以你的原始碼為基礎重建]
+// [生產級穩定版 v5.0 - 請完整複製並覆蓋 app.js]
 
 const STORAGE_KEY = 'lunchvote-plus';
 const UPDATE_EVENT = 'lunchvote:update';
 const PHASE_EVENT = 'lunchvote:phase';
 
-// --- 預設狀態 (Default State) ---
+// --- 預設狀態 ---
 const DEFAULT_STATE = {
   settings: {
     mode: 'vote',
@@ -167,8 +167,8 @@ function clearOldRecords(days) {
     Object.keys(state.orders).forEach(date => { if (date < cutoff) delete state.orders[date]; });
     persistState();
 }
-async function saveDataToServer() { /* 這裡需要你未來實現備份邏輯 */ console.log("saveDataToServer called"); }
-async function loadDataFromServer() { /* 這裡需要你未來實現還原邏輯 */ console.log("loadDataFromServer called"); }
+async function saveDataToServer() { console.log("saveDataToServer called - needs implementation"); }
+async function loadDataFromServer() { console.log("loadDataFromServer called - needs implementation"); }
 
 // --- UI 渲染 ---
 function renderNameOptions(selectElement) {
@@ -224,7 +224,7 @@ async function bootstrapApp() {
   if (resolveReadyPromise) resolveReadyPromise(state);
   
   window.addEventListener(UPDATE_EVENT, renderUI);
-  console.log("LunchVote+ 中央電腦 (v4.0-final) 已啟動。");
+  console.log("LunchVote+ 中央電腦 (v5.0-stable) 已啟動。");
 }
 
 document.addEventListener('DOMContentLoaded', bootstrapApp);
