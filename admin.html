@@ -74,13 +74,11 @@
             <div id="restaurantsList"></div>
         </section>
 
-
         <section class="card shell">
             <h2>餐廳與菜單 (v2.0)</h2>
             <select id="restaurantSelect" class="field-group">
                 <option value="">請先選擇要編輯的餐廳</option>
             </select>
-
             <div id="menuEditorV2" class="hidden">
                 <h4>總菜單圖片管理</h4>
                 <form id="menuImageForm" class="menu-image-form">
@@ -88,9 +86,7 @@
                     <button type="submit" class="ghost">新增圖片</button>
                 </form>
                 <div id="menuImagesContainer" class="menu-images-container"></div>
-                
                 <hr style="margin: 24px 0;">
-
                 <h3>分類管理</h3>
                 <form id="categoryForm" class="category-form">
                     <input type="text" id="categoryName" placeholder="輸入分類名稱 (e.g., 麵類)" required/>
@@ -117,25 +113,49 @@
                 </div>
             </div>
         </section>
+
+        <div id="setupWizard" class="modal hidden">
+            <div class="modal-content">
+                <h2>首次設定精靈</h2>
+                <div id="wizardStep1" class="wizard-step" data-step="1">
+                    <p>歡迎使用 LunchVote+！讓我們花一分鐘完成基本設定。</p>
+                    <button data-next class="primary">開始</button>
+                </div>
+                <div id="wizardStep2" class="wizard-step" data-step="2">
+                    <p>請貼上或匯入您的名單。</p>
+                    <div class="names-import">
+                        <textarea id="wizardNamesTextarea" placeholder="貼上名單..."></textarea>
+                    </div>
+                    <div class="wizard-nav">
+                        <button data-prev class="ghost">上一步</button>
+                        <button data-next class="primary">下一步</button>
+                    </div>
+                </div>
+                <div id="wizardStep3" class="wizard-step" data-step="3">
+                    <p>太棒了！這是您的專屬海報，把它印出來給學生掃描吧。</p>
+                    <canvas id="wizardCanvas" width="800" height="600" style="width: 100%; height: auto; border: 1px solid #ccc;"></canvas>
+                    <div class="wizard-nav">
+                         <button data-prev class="ghost">上一步</button>
+                         <button id="downloadPoster" class="primary">下載海報</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <div id="itemEditorModal" class="modal hidden">
         <div class="modal-content">
             <h2 id="modalTitle">編輯品項</h2>
             <form id="itemEditorForm">
-                <input type="hidden" name="itemId">
-                <input type="hidden" name="categoryId">
-                
+                <input type="hidden" name="itemId"><input type="hidden" name="categoryId">
                 <label>品項名稱: <input type="text" name="name" required></label>
                 <label>基礎價格: <input type="number" name="basePrice" required min="0"></label>
                 <label>單位 (e.g., 顆, 份): <input type="text" name="unit"></label>
                 <label>圖片網址: <input type="url" name="imageUrl" placeholder="https://..."></label>
-
                 <hr>
                 <h3>選項群組</h3>
                 <div id="optionGroupsContainer"></div>
                 <button type="button" id="addOptionGroupBtn" class="ghost">新增選項群組</button>
-                
                 <div class="modal-actions">
                     <button type="button" class="ghost" onclick="document.getElementById('itemEditorModal').classList.add('hidden')">取消</button>
                     <button type="submit" class="primary">儲存品項</button>
