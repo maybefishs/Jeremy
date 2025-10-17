@@ -1,6 +1,7 @@
 {
   "GINYIN_NOODLE": {
     "name": "金銀麵",
+    "menuImages": [],
     "categories": [
       { "id": "cat_noodle", "name": "麵類" },
       { "id": "cat_rice", "name": "飯類" },
@@ -98,6 +99,7 @@
   },
   "FANG_YUN_CHI": {
       "name": "八方雲集",
+      "menuImages": [],
       "categories": [],
       "items": []
   }
