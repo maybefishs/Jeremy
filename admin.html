@@ -22,15 +22,57 @@
         <section class="card shell">
             <h2>營運設定</h2>
             <form id="settingsForm" class="settings-grid">
-                </form>
+                <div class="field-group">
+                    <label for="mode-select">系統模式</label>
+                    <select name="mode" id="mode-select">
+                        <option value="vote">投票模式</option>
+                        <option value="order">直接點餐</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="baseDate-input">基準日期</label>
+                    <input type="date" name="baseDate" id="baseDate-input">
+                </div>
+                <div class="field-group">
+                    <label for="timezone-select">時區</label>
+                    <select name="timezone" id="timezone-select">
+                        <option value="Asia/Taipei">Asia/Taipei</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label class="toggle">
+                        <input type="checkbox" name="requiresPreorder">
+                        <span>全日需預訂</span>
+                    </label>
+                </div>
+            </form>
         </section>
 
         <section class="card shell">
             <h2>名單管理</h2>
             <div class="names-import">
+                <textarea id="namesTextarea" placeholder="貼上名單，用換行、逗號或空格分隔"></textarea>
+                <div class="import-actions">
+                    <button id="importNamesBtn" class="primary">匯入名單</button>
+                    <label class="ghost">從 CSV 匯入<input type="file" id="importCsv" accept=".csv" class="hidden"></label>
                 </div>
+            </div>
             <ul id="namesList" class="names-list"></ul>
         </section>
+        
+        <section class="card shell">
+            <h2>餐廳列表</h2>
+            <form id="restaurantForm" class="restaurant-form">
+                <input type="text" name="name" placeholder="新增餐廳名稱" required>
+                <label class="toggle">
+                    <input type="checkbox" name="requiresPreorder">
+                    <span>需預訂</span>
+                </label>
+                <button type="submit" class="primary">新增</button>
+            </form>
+            <div id="restaurantsList"></div>
+        </section>
+
 
         <section class="card shell">
             <h2>餐廳與菜單 (v2.0)</h2>
@@ -44,14 +86,27 @@
                     <input type="text" id="categoryName" placeholder="輸入分類名稱 (e.g., 麵類)" required/>
                     <button type="submit" class="ghost">新增分類</button>
                 </form>
-                <div id="categoryContainer" class="category-container">
-                    </div>
+                <div id="categoryContainer" class="category-container"></div>
             </div>
         </section>
         
         <section class="card shell">
             <h2>備份與維運</h2>
-            </section>
+            <div class="backup-grid">
+                <div class="field-group">
+                    <label class="toggle">
+                        <input type="checkbox" id="backupToggle">
+                        <span>啟用遠端備份</span>
+                    </label>
+                </div>
+                <input type="url" id="backupUrl" placeholder="輸入備份網址 (e.g., Google Apps Script)">
+                <div class="backup-actions">
+                    <button id="backupNow" class="primary">立即備份</button>
+                    <button id="restoreBackup" class="ghost">從遠端還原</button>
+                    <button id="clearOldRecords" class="danger">清除30天前舊資料</button>
+                </div>
+            </div>
+        </section>
     </main>
 
     <div id="itemEditorModal" class="modal hidden">
@@ -80,7 +135,24 @@
     </div>
 
     <div id="pinModal" class="modal">
+        <div class="modal-content">
+            <div id="setPinPanel" class="hidden">
+                <h2>首次設定 PIN</h2>
+                <form id="setPinForm">
+                    <input type="password" id="newPin" placeholder="請設定 4 位以上 PIN" required>
+                    <input type="password" id="confirmPin" placeholder="再次確認 PIN" required>
+                    <button type="submit">設定</button>
+                    <p id="setPinError" class="error"></p>
+                </form>
+            </div>
+            <form id="pinForm">
+                <h2>請輸入管理 PIN</h2>
+                <input type="password" id="pinInput" required>
+                <button type="submit">解鎖</button>
+                <p id="pinError" class="error"></p>
+            </form>
         </div>
+    </div>
 
     <script type="module" src="./app.js"></script>
     <script type="module" src="./admin.js"></script>
