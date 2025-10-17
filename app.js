@@ -25,9 +25,12 @@ const DEFAULT_STATE = {
 // ------------------- 全域變數 (Global Variables) -------------------
 let state = null;
 const readyPromise = new Promise((resolve) => {
-  window.whenReady = () => readyPromise;
   readyPromise.resolve = resolve;
 });
+
+function whenReady() { // <--- 我們在這裡正式賦予它一個名份
+  return readyPromise;
+}
 
 // ------------------- 狀態管理 (State Management) -------------------
 function loadState() {
