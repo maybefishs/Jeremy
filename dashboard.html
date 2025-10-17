@@ -8,11 +8,6 @@
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-    <script>
-      dayjs.extend(window.dayjs_plugin_utc);
-      dayjs.extend(window.dayjs_plugin_timezone);
-    </script>
   </head>
   <body data-page="dashboard">
     <header class="top-bar">
@@ -25,33 +20,36 @@
 
     <main>
       <section class="card shell">
-        <h2>餐廳人氣</h2>
-        <canvas id="chartRestaurants"></canvas>
+        <h2 id="dashboard-date-display">儀表板</h2>
       </section>
 
       <section class="card shell">
-        <h2>每日訂餐總額</h2>
-        <canvas id="chartDaily"></canvas>
+        <h3>投票摘要</h3>
+        <ul id="vote-summary-list" class="list-group"></ul>
       </section>
 
       <section class="card shell">
-        <h2>付款狀態</h2>
-        <canvas id="chartPayments"></canvas>
+        <h3>訂單摘要</h3>
+        <ul id="order-summary-list" class="list-group"></ul>
+      </section>
+
+      <section class="card shell">
+        <h3>財務概覽</h3>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span>總銷售額：</span>
+          <strong id="total-sales">$0</strong>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+          <span>未付款人數：</span>
+          <strong id="unpaid-count">0 人</strong>
+        </div>
       </section>
     </main>
 
     <footer class="action-bar">
       <div class="totals">
-        <span>操作提示</span>
-        <strong>滑動切換圖表</strong>
-      </div>
-      <div class="totals">
         <span>更新時間</span>
         <strong id="dashboardTimestamp">--:--</strong>
-      </div>
-      <div class="totals">
-        <span>下一步</span>
-        <strong>確認備份</strong>
       </div>
       <div class="totals">
         <span>口號</span>
@@ -62,9 +60,10 @@
     <script type="module" src="./app.js"></script>
     <script type="module" src="./dashboard.js"></script>
     <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('dashboardTimestamp').textContent = dayjs().format('HH:mm');
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("dashboardTimestamp").textContent = dayjs().format("HH:mm");
       });
     </script>
   </body>
 </html>
+

@@ -1,270 +1,213 @@
-import {
-  bootstrapApp,
-  whenReady,
-  getActiveDate,
-  getRestaurants,
-  getMenus,
-  setOrder,
-  getOrder,
-  getOrders,
-  computeTotals,
-  getNames,
-  lockOrder,
-  generateLineSummary
-} from './app.js';
+import { getSettings, getActiveDate, getNames, getRestaurants, getMenus, recordOrder, getOrders, getPhaseAndDeadlines, updateSettings, getRestaurantById } from './app.js';
 
-const NAME_STORAGE_KEY = 'lunchvote-user-name';
-const ORDER_CACHE_PREFIX = 'lunchvote-order-cache-';
-const orderSection = document.querySelector('[data-section="order"]');
+document.addEventListener("DOMContentLoaded", async () => {
+    await window.whenReady(); // 等待 app.js 初始化完成
 
-if (orderSection) {
-  bootstrapApp();
-  const restaurantSelect = document.getElementById('restaurantSelect');
-  const menuContainer = document.getElementById('menuCards');
-  const noteInput = document.getElementById('orderNote');
-  const submitOrderBtn = document.getElementById('submitOrder');
-  const lockOrderBtn = document.getElementById('lockOrderBtn');
-  const copyOrderLineBtn = document.getElementById('copyOrderLine');
-  const personalSubtotalEl = document.getElementById('personalSubtotal');
-  const classTotalEl = document.getElementById('classTotal');
-  const unpaidEl = document.getElementById('unpaidCount');
-  const missingEl = document.getElementById('missingOrders');
-  const countdown = document.getElementById('countdown');
-  const nameSelect = document.getElementById('nameSelect');
-  const customNameInput = document.getElementById('customNameInput');
+    const orderSection = document.querySelector('[data-section="order"]');
+    const userSelectOrder = document.getElementById("user-select-order");
+    const menuCardsContainer = document.getElementById("menuCards");
+    const orderForm = document.getElementById("order-form");
+    const orderItemsList = document.getElementById("order-items");
+    const orderTotalDisplay = document.getElementById("order-total");
+    const submitOrderBtn = document.getElementById("submit-order-btn");
+    const personalSubtotalDisplay = document.getElementById("personalSubtotal");
 
-  let currentName = localStorage.getItem(NAME_STORAGE_KEY) || '';
-  let workingOrder = { restaurantId: '', items: [], note: '', paid: false };
+    let currentOrder = { restaurantId: '', items: [], subtotal: 0 }; // { restaurantId: '', items: [{id, name, price, qty}], subtotal: 0 }
+    let selectedName = '';
 
-  function resolveName() {
-    if (!currentName) {
-      if (nameSelect?.value === 'other') {
-        return customNameInput?.value.trim() || '';
-      }
-      return nameSelect?.value || '';
+    // Load selectedName from localStorage if available
+    const storedName = localStorage.getItem('lunchvote-selected-name');
+    if (storedName) {
+        selectedName = storedName;
     }
-    return currentName;
-  }
 
-  function cacheKey(name) {
-    return `${ORDER_CACHE_PREFIX}${getActiveDate()}_${name}`;
-  }
+    function updatePersonalSubtotal() {
+        const orders = getOrders(getActiveDate());
+        const myOrder = orders[selectedName];
+        personalSubtotalDisplay.textContent = `$${myOrder?.subtotal || 0}`;
+    }
 
-  function loadWorkingOrder() {
-    const name = resolveName();
-    if (!name) return;
-    const saved = getOrder(getActiveDate(), name);
-    if (saved) {
-      workingOrder = deepCloneOrder(saved);
-      workingOrder.paid = saved.paid || false;
-    } else {
-      const local = localStorage.getItem(cacheKey(name));
-      if (local) {
-        try {
-          workingOrder = JSON.parse(local);
-        } catch (error) {
-          console.warn('Failed to parse cached order', error);
+    function renderOrderUI() {
+        const { phase } = getPhaseAndDeadlines();
+        if (phase === 'order') {
+            orderSection.classList.remove('hidden');
+        } else {
+            orderSection.classList.add('hidden');
+            return;
         }
-      }
-    }
-    if (restaurantSelect && workingOrder.restaurantId) {
-      restaurantSelect.value = workingOrder.restaurantId;
-    }
-    renderMenu();
-    updateBottomBar();
-  }
 
-  function deepCloneOrder(order) {
-    return JSON.parse(JSON.stringify(order));
-  }
+        const settings = getSettings();
+        const activeDate = getActiveDate();
+        const names = getNames();
+        const restaurants = getRestaurants();
+        const allMenus = getMenus();
+        const orders = getOrders(activeDate);
 
-  function renderRestaurants() {
-    const restaurants = getRestaurants(true);
-    restaurantSelect.innerHTML = '<option value="">選擇餐廳</option>';
-    restaurants.forEach((restaurant) => {
-      const option = document.createElement('option');
-      option.value = restaurant.id;
-      option.textContent = `${restaurant.name}${restaurant.status === 'closed' ? '（停售）' : restaurant.status === 'soldout' ? '（售完）' : ''}`;
-      option.disabled = restaurant.status === 'closed';
-      if (workingOrder.restaurantId === restaurant.id) {
-        option.selected = true;
-      }
-      restaurantSelect.appendChild(option);
-    });
-  }
-
-  function ensureItem(item) {
-    const existing = workingOrder.items.find((entry) => entry.id === item.id);
-    if (!existing) {
-      workingOrder.items.push({ ...item, qty: 0 });
-      return workingOrder.items[workingOrder.items.length - 1];
-    }
-    return existing;
-  }
-
-  function adjustItem(item, delta) {
-    const entry = ensureItem(item);
-    entry.qty = Math.max(0, (entry.qty || 0) + delta);
-    if (entry.qty === 0) {
-      workingOrder.items = workingOrder.items.filter((row) => row.id !== item.id);
-    }
-    updateBottomBar();
-    persistLocal();
-    renderMenu();
-  }
-
-  function renderMenu() {
-    const menuData = getMenus();
-    const restaurantId = restaurantSelect.value || workingOrder.restaurantId;
-    if (!restaurantId) {
-      menuContainer.innerHTML = '<p class="empty">請先選擇餐廳</p>';
-      return;
-    }
-    workingOrder.restaurantId = restaurantId;
-    const menu = menuData[restaurantId];
-    if (!menu) {
-      menuContainer.innerHTML = '<p class="empty">尚未設定菜單</p>';
-      return;
-    }
-    menuContainer.innerHTML = '';
-    menu.items.forEach((item) => {
-      const card = document.createElement('div');
-      card.className = `card menu-card ${item.available ? '' : 'disabled'}`;
-      card.innerHTML = `
-        <div class="card-header">
-          <span class="card-title">${item.name}</span>
-          <span class="card-meta">$${item.price}</span>
-        </div>
-        <div class="menu-actions">
-          <button type="button" class="qty-btn" data-action="decrease">−</button>
-          <span class="qty-value">${getQty(item.id)}</span>
-          <button type="button" class="qty-btn" data-action="increase">＋</button>
-        </div>
-        <div class="badge-row">
-          <span class="badge ${item.available ? 'badge-info' : 'badge-danger'}">${item.available ? '可訂購' : '售完'}</span>
-        </div>
-      `;
-      const decrease = card.querySelector('[data-action="decrease"]');
-      const increase = card.querySelector('[data-action="increase"]');
-      decrease.addEventListener('click', () => adjustItem(item, -1));
-      increase.addEventListener('click', () => {
-        if (!item.available) {
-          showToast('此品項已售完');
-          return;
+        // Populate name dropdown
+        userSelectOrder.innerHTML = '<option value="">請選擇你的名字</option>';
+        names.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            userSelectOrder.appendChild(option);
+        });
+        if (selectedName) {
+            userSelectOrder.value = selectedName;
         }
-        adjustItem(item, 1);
-      });
-      menuContainer.appendChild(card);
-    });
-  }
 
-  function getQty(itemId) {
-    const entry = workingOrder.items.find((item) => item.id === itemId);
-    return entry?.qty || 0;
-  }
+        // Render menu cards for ordering
+        menuCardsContainer.innerHTML = '';
+        restaurants.forEach(restaurant => {
+            const restaurantMenu = allMenus[restaurant.id] || [];
+            // Only show restaurants that have menus and are not closed
+            if (restaurantMenu.length === 0 || restaurant.status === 'closed') return; 
 
-  function updateBottomBar() {
-    const name = resolveName();
-    const subtotal = workingOrder.items.reduce((sum, item) => sum + item.price * item.qty, 0);
-    personalSubtotalEl.textContent = `$${subtotal.toFixed(0)}`;
-    if (noteInput) {
-      noteInput.value = workingOrder.note || '';
+            const card = document.createElement('div');
+            card.className = 'card menu-card';
+            card.innerHTML = `
+                <h3 class="card-title">${restaurant.name}</h3>
+                <ul class="list-group list-group-flush">
+                    ${restaurantMenu.map(item => `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            ${item.name} <span class="badge bg-primary rounded-pill">$${item.price}</span>
+                            <div class="input-group input-group-sm" style="width: 120px;">
+                                <button class="btn btn-outline-secondary decrease-qty" type="button" data-item-id="${item.id}" data-restaurant-id="${restaurant.id}">-</button>
+                                <input type="text" class="form-control text-center item-qty" value="0" data-item-id="${item.id}" data-restaurant-id="${restaurant.id}" readonly>
+                                <button class="btn btn-outline-secondary increase-qty" type="button" data-item-id="${item.id}" data-restaurant-id="${restaurant.id}">+</button>
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+            menuCardsContainer.appendChild(card);
+        });
+
+        // Load existing order for selected name
+        if (selectedName && orders[selectedName]) {
+            currentOrder = JSON.parse(JSON.stringify(orders[selectedName])); // Deep copy
+            updateOrderForm();
+            // Update quantity inputs on menu cards
+            currentOrder.items.forEach(orderItem => {
+                const qtyInput = menuCardsContainer.querySelector(`input.item-qty[data-item-id="${orderItem.id}"][data-restaurant-id="${currentOrder.restaurantId}"]`);
+                if (qtyInput) qtyInput.value = orderItem.qty;
+            });
+        } else {
+            currentOrder = { restaurantId: '', items: [], subtotal: 0 };
+            updateOrderForm();
+        }
+        updatePersonalSubtotal();
     }
-    const totals = computeTotals(getActiveDate());
-    classTotalEl.textContent = `$${totals.classTotal.toFixed(0)}`;
-    unpaidEl.textContent = `${totals.unpaid.length} 人未付款`;
-    const orderMap = Object.keys(getOrders(getActiveDate()));
-    const missing = getNames().filter((person) => !orderMap.includes(person));
-    missingEl.textContent = missing.length ? `未下單：${missing.join('、')}` : '所有人皆已下單';
-    submitOrderBtn.disabled = !name || !workingOrder.restaurantId || subtotal <= 0;
-  }
 
-  function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('visible'));
-    setTimeout(() => {
-      toast.classList.remove('visible');
-      setTimeout(() => toast.remove(), 300);
-    }, 2500);
-  }
+    function updateOrderForm() {
+        orderItemsList.innerHTML = '';
+        let total = 0;
 
-  function persistLocal() {
-    const name = resolveName();
-    if (!name) return;
-    localStorage.setItem(cacheKey(name), JSON.stringify(workingOrder));
-  }
+        if (currentOrder.items.length === 0) {
+            orderForm.classList.add('hidden');
+            orderTotalDisplay.textContent = '$0';
+            return;
+        }
 
-  submitOrderBtn?.addEventListener('click', () => {
-    const name = resolveName();
-    if (!name) {
-      showToast('請先選擇姓名');
-      return;
+        orderForm.classList.remove('hidden');
+        currentOrder.items.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.innerHTML = `
+                ${item.name} x ${item.qty} <span class="badge bg-secondary rounded-pill">$${item.price * item.qty}</span>
+            `;
+            orderItemsList.appendChild(li);
+            total += item.price * item.qty;
+        });
+        currentOrder.subtotal = total;
+        orderTotalDisplay.textContent = `$${total}`;
     }
-    workingOrder.note = noteInput.value;
-    setOrder(getActiveDate(), name, workingOrder);
-    persistLocal();
-    showToast('已送出訂單');
-    updateBottomBar();
-  });
 
-  noteInput?.addEventListener('input', () => {
-    workingOrder.note = noteInput.value;
-    persistLocal();
-  });
+    menuCardsContainer.addEventListener('click', (e) => {
+        if (!selectedName) {
+            alert('請先選擇你的名字！');
+            return;
+        }
 
-  nameSelect?.addEventListener('change', () => {
-    currentName = resolveName();
-    loadWorkingOrder();
-  });
+        const target = e.target;
+        const itemId = target.dataset.itemId;
+        const restaurantId = target.dataset.restaurantId;
 
-  customNameInput?.addEventListener('blur', () => {
-    currentName = resolveName();
-    loadWorkingOrder();
-  });
+        if (!itemId || !restaurantId) return;
 
-  restaurantSelect?.addEventListener('change', () => {
-    workingOrder.restaurantId = restaurantSelect.value;
-    persistLocal();
-    renderMenu();
-    updateBottomBar();
-  });
+        const restaurants = getRestaurants();
+        const allMenus = getMenus();
+        const restaurant = restaurants.find(r => r.id === restaurantId);
+        const menu = allMenus[restaurantId];
+        const menuItem = menu.find(item => item.id === itemId);
 
-  lockOrderBtn?.addEventListener('click', () => {
-    if (confirm('確定鎖定點餐並進入結果階段？')) {
-      lockOrder();
-      showToast('點餐已鎖定');
-    }
-  });
+        if (!menuItem) return;
 
-  copyOrderLineBtn?.addEventListener('click', async () => {
-    const summary = generateLineSummary(getActiveDate());
-    await navigator.clipboard.writeText(summary);
-    showToast('已複製到 LINE');
-  });
+        // If changing restaurant, clear current order
+        if (currentOrder.restaurantId && currentOrder.restaurantId !== restaurantId) {
+            if (!confirm('你已經選擇了其他餐廳的餐點，確定要更換餐廳嗎？這將會清空目前的訂單。')) {
+                return;
+            }
+            // Reset quantities on old restaurant's menu items
+            currentOrder.items.forEach(oldItem => {
+                const oldQtyInput = menuCardsContainer.querySelector(`input.item-qty[data-item-id="${oldItem.id}"][data-restaurant-id="${currentOrder.restaurantId}"]`);
+                if (oldQtyInput) oldQtyInput.value = 0;
+            });
+            currentOrder = { restaurantId: restaurantId, items: [], subtotal: 0 };
+        } else if (!currentOrder.restaurantId) {
+            currentOrder.restaurantId = restaurantId;
+        }
 
-  whenReady().then(() => {
-    renderRestaurants();
-    loadWorkingOrder();
-    window.addEventListener('lunchvote:update', () => {
-      renderRestaurants();
-      loadWorkingOrder();
+        let currentQtyInput = menuCardsContainer.querySelector(`input.item-qty[data-item-id="${itemId}"][data-restaurant-id="${restaurantId}"]`);
+        let currentQty = parseInt(currentQtyInput.value);
+
+        if (target.classList.contains('increase-qty')) {
+            currentQty++;
+        } else if (target.classList.contains('decrease-qty')) {
+            currentQty = Math.max(0, currentQty - 1);
+        }
+        currentQtyInput.value = currentQty;
+
+        // Update currentOrder.items
+        const existingItemIndex = currentOrder.items.findIndex(item => item.id === itemId);
+        if (currentQty > 0) {
+            if (existingItemIndex > -1) {
+                currentOrder.items[existingItemIndex].qty = currentQty;
+            } else {
+                currentOrder.items.push({ id: menuItem.id, name: menuItem.name, price: menuItem.price, qty: currentQty });
+            }
+        } else {
+            if (existingItemIndex > -1) {
+                currentOrder.items.splice(existingItemIndex, 1);
+            }
+        }
+        updateOrderForm();
     });
-    window.addEventListener('lunchvote:phase', (event) => {
-      const { phase, deadlines } = event.detail;
-      if (phase === 'order') {
-        countdown.textContent = `下單截止 ${deadlines.order}`;
-        orderSection.classList.remove('locked');
-      } else if (phase === 'vote') {
-        countdown.textContent = `投票截止 ${deadlines.vote}`;
-        orderSection.classList.add('locked');
-      } else {
-        countdown.textContent = '今日結果';
-        orderSection.classList.add('locked');
-      }
+
+    userSelectOrder.addEventListener('change', (e) => {
+        selectedName = e.target.value;
+        localStorage.setItem('lunchvote-selected-name', selectedName); // Save selected name
+        renderOrderUI(); // Re-render to load user's existing order
     });
-    window.LunchVote.checkPhaseChange();
-  });
-}
+
+    submitOrderBtn.addEventListener('click', () => {
+        if (!selectedName) {
+            alert('請先選擇你的名字！');
+            return;
+        }
+        if (currentOrder.items.length === 0) {
+            alert('請選擇餐點！');
+            return;
+        }
+        recordOrder(getActiveDate(), selectedName, currentOrder);
+        alert('訂單已提交！');
+        updatePersonalSubtotal();
+    });
+
+    // Listen for updates from app.js and phase changes
+    window.addEventListener('lunchvote:update', renderOrderUI);
+    window.addEventListener('lunchvote:phase', renderOrderUI);
+
+    // Initial render
+    renderOrderUI();
+});
+

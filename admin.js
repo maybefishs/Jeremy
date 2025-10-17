@@ -1,510 +1,324 @@
-import {
-  bootstrapApp,
-  whenReady,
-  getSettings,
-  updateSettings,
-  getNames,
-  addNames,
-  removeName,
-  getRestaurants,
-  upsertRestaurant,
-  removeRestaurant,
-  getMenus,
-  setMenu,
-  saveDataToServer,
-  loadDataFromServer,
-  clearOldRecords,
-  setPin,
-  verifyPin,
-  getActiveDate
-} from './app.js';
+import { getSettings, updateSettings, getNames, addNames, removeName, getRestaurants, upsertRestaurant, removeRestaurant, getMenus, setMenu, setPin, verifyPin, saveDataToServer, loadDataFromServer, clearOldRecords } from './app.js';
 
-const adminPage = document.querySelector('[data-page="admin"]');
+document.addEventListener("DOMContentLoaded", async () => {
+    await window.whenReady(); // 等待 app.js 初始化完成
 
-if (adminPage) {
-  bootstrapApp();
-  const pinModal = document.getElementById('pinModal');
-  const pinForm = document.getElementById('pinForm');
-  const pinInput = document.getElementById('pinInput');
-  const pinError = document.getElementById('pinError');
-  const setPinForm = document.getElementById('setPinForm');
-  const newPinInput = document.getElementById('newPin');
-  const confirmPinInput = document.getElementById('confirmPin');
-  const setPinError = document.getElementById('setPinError');
-  const settingsForm = document.getElementById('settingsForm');
-  const namesList = document.getElementById('namesList');
-  const namesTextarea = document.getElementById('namesTextarea');
-  const importCsvInput = document.getElementById('importCsv');
-  const restaurantsList = document.getElementById('restaurantsList');
-  const restaurantForm = document.getElementById('restaurantForm');
-  const menuSelect = document.getElementById('menuRestaurantSelect');
-  const menuList = document.getElementById('menuList');
-  const addMenuItemBtn = document.getElementById('addMenuItem');
-  const backupToggle = document.getElementById('backupToggle');
-  const backupUrlInput = document.getElementById('backupUrl');
-  const backupNowBtn = document.getElementById('backupNow');
-  const restoreBtn = document.getElementById('restoreBackup');
-  const clearOldBtn = document.getElementById('clearOldRecords');
-  const wizard = document.getElementById('setupWizard');
-  const wizardStartBtn = document.getElementById('startWizard');
-  const wizardCanvas = document.getElementById('wizardCanvas');
-  const wizardDownloadBtn = document.getElementById('downloadPoster');
+    const adminPinModal = new bootstrap.Modal(document.getElementById("adminPinModal"));
+    const setPinModal = new bootstrap.Modal(document.getElementById("setPinModal"));
+    const setupWizardModal = new bootstrap.Modal(document.getElementById("setupWizardModal"));
 
-  let activeMenuItems = [];
-  let activeRestaurantId = '';
+    const adminPinInput = document.getElementById("admin-pin-input");
+    const adminPinVerifyBtn = document.getElementById("admin-pin-verify-btn");
+    const adminPinError = document.getElementById("admin-pin-error");
 
-  const state = {
-    wizardStep: 1
-  };
+    const setupPinInput = document.getElementById("setup-pin-input");
+    const setupPinConfirmInput = document.getElementById("setup-pin-confirm-input");
+    const setupPinSetBtn = document.getElementById("setup-pin-set-btn");
+    const setupPinError = document.getElementById("setup-pin-error");
 
-  function showPinModal() {
-    pinModal.classList.remove('hidden');
-    pinInput.focus();
-  }
+    const setupWizardNextBtn = document.getElementById("setup-wizard-next-btn");
+    const setupWizardPrevBtn = document.getElementById("setup-wizard-prev-btn");
+    const setupWizardFinishBtn = document.getElementById("setup-wizard-finish-btn");
+    const setupWizardSteps = document.querySelectorAll(".setup-wizard-step");
+    let currentStep = 0;
 
-  function hidePinModal() {
-    pinModal.classList.add('hidden');
-  }
+    const namesInput = document.getElementById("names-input");
+    const namesList = document.getElementById("names-list");
+    const addNameBtn = document.getElementById("add-name-btn");
 
-  async function handlePinSubmit(event) {
-    event.preventDefault();
-    const pin = pinInput.value.trim();
-    const result = await verifyPin(pin);
-    if (result.ok) {
-      if (result.reason === 'not_set') {
-        document.getElementById('setPinPanel').classList.remove('hidden');
-        pinForm.classList.add('hidden');
-        newPinInput.focus();
-      } else {
-        hidePinModal();
-      }
-    } else if (result.reason === 'locked') {
-      pinError.textContent = `已鎖定，請於 ${new Date(result.unlockAt).toLocaleTimeString()} 再試。`;
-    } else {
-      pinError.textContent = '密碼錯誤，請再試一次。';
-    }
-    pinForm.reset();
-  }
+    const restaurantNameInput = document.getElementById("restaurant-name");
+    const restaurantTagsInput = document.getElementById("restaurant-tags");
+    const restaurantPreorderCheckbox = document.getElementById("restaurant-preorder");
+    const addRestaurantBtn = document.getElementById("add-restaurant-btn");
+    const restaurantList = document.getElementById("restaurant-list");
+    const restaurantMenuInput = document.getElementById("restaurant-menu-input");
+    const saveMenuBtn = document.getElementById("save-menu-btn");
+    const currentRestaurantName = document.getElementById("current-restaurant-name");
+    let editingRestaurantId = null;
 
-  setPinForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const pin = newPinInput.value.trim();
-    if (pin.length < 4) {
-      setPinError.textContent = 'PIN 至少 4 位數。';
-      return;
-    }
-    if (pin !== confirmPinInput.value.trim()) {
-      setPinError.textContent = '兩次輸入不一致。';
-      return;
-    }
-    await setPin(pin);
-    document.getElementById('setPinPanel').classList.add('hidden');
-    pinForm.classList.remove('hidden');
-    hidePinModal();
-    showToast('已設定 PIN');
-  });
+    const backupUrlInput = document.getElementById("backup-url-input");
+    const saveBackupUrlBtn = document.getElementById("save-backup-url-btn");
+    const backupNowBtn = document.getElementById("backup-now-btn");
+    const restoreNowBtn = document.getElementById("restore-now-btn");
+    const clearOldRecordsBtn = document.getElementById("clear-old-records-btn");
+    const backupStatus = document.getElementById("backup-status");
 
-  function populateSettings() {
-    const settings = getSettings();
-    settingsForm.mode.value = settings.mode;
-    settingsForm.baseDate.value = settings.baseDate;
-    settingsForm.timezone.value = settings.timezone;
-    settingsForm.requiresPreorder.checked = !!settings.requiresPreorder;
-    backupToggle.checked = !!settings.backup?.enabled;
-    backupUrlInput.value = settings.backup?.url || '';
-  }
+    const qrCodeContainer = document.getElementById("qrcode");
+    const qrCodeLink = document.getElementById("qrcode-link");
 
-  function renderNames() {
-    const names = getNames();
-    namesList.innerHTML = '';
-    names.forEach((name) => {
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <span>${name}</span>
-        <button type="button" data-name="${name}">刪除</button>
-      `;
-      li.querySelector('button').addEventListener('click', () => {
-        if (confirm(`確定刪除 ${name}？`)) {
-          removeName(name);
-          renderNames();
+    // --- PIN 碼驗證邏輯 ---
+    async function checkAdminPin() {
+        const settings = getSettings();
+        if (!settings.adminPinSet) {
+            setupWizardModal.show();
+            showSetupStep(0);
+        } else {
+            adminPinModal.show();
         }
-      });
-      namesList.appendChild(li);
-    });
-  }
+    }
 
-  function handleNamesImport() {
-    const text = namesTextarea.value.trim();
-    if (!text) return;
-    const names = text
-      .split(/\r?\n|,|\s/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-    addNames(names);
-    namesTextarea.value = '';
-    renderNames();
-    showToast('已匯入名單');
-  }
-
-  function handleCsvImport(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = String(text).split(/\r?\n/).filter(Boolean);
-      addNames(lines.map((line) => line.split(',')[0].trim()));
-      renderNames();
-      showToast('CSV 名單匯入完成');
-    };
-    reader.readAsText(file, 'utf-8');
-  }
-
-  function renderRestaurants() {
-    const restaurants = getRestaurants(true);
-    restaurantsList.innerHTML = '';
-    restaurants.forEach((restaurant) => {
-      const item = document.createElement('div');
-      item.className = 'list-row';
-      item.innerHTML = `
-        <div>
-          <strong>${restaurant.name}</strong>
-          <p>${restaurant.requiresPreorder ? '需預訂' : '免預訂'} · ${restaurant.status === 'open' ? '營業中' : restaurant.status === 'soldout' ? '售完' : '停售'}</p>
-        </div>
-        <div class="actions">
-          <button type="button" data-action="menu" data-id="${restaurant.id}">菜單</button>
-          <button type="button" data-action="toggle" data-id="${restaurant.id}">${restaurant.status === 'open' ? '停售' : '開啟'}</button>
-          <button type="button" data-action="soldout" data-id="${restaurant.id}">${restaurant.status === 'soldout' ? '恢復' : '標記售完'}</button>
-          <button type="button" data-action="delete" data-id="${restaurant.id}">刪除</button>
-        </div>
-      `;
-      item.querySelector('[data-action="menu"]').addEventListener('click', () => {
-        activeRestaurantId = restaurant.id;
-        populateMenuEditor();
-        menuSelect.value = restaurant.id;
-      });
-      item.querySelector('[data-action="toggle"]').addEventListener('click', () => {
-        const nextStatus = restaurant.status === 'open' ? 'closed' : 'open';
-        upsertRestaurant({ ...restaurant, status: nextStatus });
-        renderRestaurants();
-      });
-      item.querySelector('[data-action="soldout"]').addEventListener('click', () => {
-        const nextStatus = restaurant.status === 'soldout' ? 'open' : 'soldout';
-        upsertRestaurant({ ...restaurant, status: nextStatus });
-        renderRestaurants();
-      });
-      item.querySelector('[data-action="delete"]').addEventListener('click', () => {
-        if (confirm('確定刪除餐廳？')) {
-          removeRestaurant(restaurant.id);
-          renderRestaurants();
+    adminPinVerifyBtn.addEventListener("click", async () => {
+        const pin = adminPinInput.value;
+        const result = await verifyPin(pin);
+        if (result.ok) {
+            adminPinModal.hide();
+            adminPinInput.value = "";
+            renderAdminPanel();
+        } else {
+            adminPinError.textContent = "PIN 碼錯誤或帳戶鎖定";
+            adminPinError.style.display = "block";
         }
-      });
-      restaurantsList.appendChild(item);
     });
-  }
 
-  restaurantForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const formData = new FormData(restaurantForm);
-    const id = String(formData.get('id') || '').trim() || crypto.randomUUID();
-    const name = String(formData.get('name') || '').trim();
-    const requiresPreorder = formData.get('requiresPreorder') === 'on';
-    if (!name) {
-      showToast('請輸入餐廳名稱');
-      return;
-    }
-    upsertRestaurant({ id, name, requiresPreorder, status: 'open' });
-    restaurantForm.reset();
-    renderRestaurants();
-    populateMenuSelector();
-    showToast('已新增餐廳');
-  });
-
-  function populateMenuSelector() {
-    const restaurants = getRestaurants(true);
-    menuSelect.innerHTML = '<option value="">選擇餐廳</option>';
-    restaurants.forEach((restaurant) => {
-      const option = document.createElement('option');
-      option.value = restaurant.id;
-      option.textContent = restaurant.name;
-      menuSelect.appendChild(option);
+    setupPinSetBtn.addEventListener("click", async () => {
+        const pin = setupPinInput.value;
+        const confirmPin = setupPinConfirmInput.value;
+        if (pin === "" || confirmPin === "") {
+            setupPinError.textContent = "PIN 碼不能為空";
+            setupPinError.style.display = "block";
+            return;
+        }
+        if (pin !== confirmPin) {
+            setupPinError.textContent = "兩次輸入的 PIN 碼不一致";
+            setupPinError.style.display = "block";
+            return;
+        }
+        await setPin(pin);
+        updateSettings({ adminPinSet: true });
+        setupPinError.style.display = "none";
+        alert("PIN 碼設定成功！");
+        setPinModal.hide();
+        showSetupStep(currentStep + 1);
     });
-    if (activeRestaurantId) {
-      menuSelect.value = activeRestaurantId;
-    }
-  }
 
-  function populateMenuEditor() {
-    const menus = getMenus();
-    if (!activeRestaurantId) {
-      menuList.innerHTML = '<p class="empty">請選擇餐廳</p>';
-      return;
-    }
-    const menu = menus[activeRestaurantId];
-    activeMenuItems = menu?.items ? [...menu.items] : [];
-    renderMenuItems();
-  }
+    // --- 設定精靈邏輯 ---
+    function showSetupStep(step) {
+        setupWizardSteps.forEach((s, i) => {
+            s.classList.remove("active");
+            if (i === step) {
+                s.classList.add("active");
+            }
+        });
+        currentStep = step;
 
-  function renderMenuItems() {
-    if (!activeMenuItems.length) {
-      menuList.innerHTML = '<p class="empty">尚未設定菜單</p>';
-      return;
+        setupWizardPrevBtn.style.display = currentStep === 0 ? "none" : "inline-block";
+        setupWizardNextBtn.style.display = currentStep === setupWizardSteps.length - 1 ? "none" : "inline-block";
+        setupWizardFinishBtn.style.display = currentStep === setupWizardSteps.length - 1 ? "inline-block" : "none";
     }
-    menuList.innerHTML = '';
-    activeMenuItems.forEach((item, index) => {
-      const row = document.createElement('div');
-      row.className = 'menu-row';
-      row.innerHTML = `
-        <input type="text" value="${item.name}" data-field="name" data-index="${index}" />
-        <input type="number" value="${item.price}" min="0" data-field="price" data-index="${index}" />
-        <label class="toggle">
-          <input type="checkbox" data-field="available" data-index="${index}" ${item.available ? 'checked' : ''} />
-          <span>可售</span>
-        </label>
-        <button type="button" data-action="remove" data-index="${index}">刪除</button>
-      `;
-      row.querySelector('[data-field="name"]').addEventListener('input', (event) => {
-        activeMenuItems[index].name = event.target.value;
-        persistMenu();
-      });
-      row.querySelector('[data-field="price"]').addEventListener('input', (event) => {
-        activeMenuItems[index].price = Number(event.target.value || 0);
-        persistMenu();
-      });
-      row.querySelector('[data-field="available"]').addEventListener('change', (event) => {
-        activeMenuItems[index].available = event.target.checked;
-        persistMenu();
-      });
-      row.querySelector('[data-action="remove"]').addEventListener('click', () => {
-        activeMenuItems.splice(index, 1);
-        persistMenu();
-        renderMenuItems();
-      });
-      menuList.appendChild(row);
+
+    setupWizardNextBtn.addEventListener("click", () => {
+        if (currentStep === 0) { // 設定 PIN 碼步驟
+            setPinModal.show();
+        } else {
+            showSetupStep(currentStep + 1);
+        }
     });
-  }
 
-  function persistMenu() {
-    if (!activeRestaurantId) return;
-    setMenu(activeRestaurantId, {
-      name: getRestaurants(true).find((r) => r.id === activeRestaurantId)?.name || '',
-      items: activeMenuItems
+    setupWizardPrevBtn.addEventListener("click", () => {
+        showSetupStep(currentStep - 1);
     });
-  }
 
-  addMenuItemBtn?.addEventListener('click', () => {
-    if (!menuSelect.value) {
-      showToast('請先選擇餐廳');
-      return;
+    setupWizardFinishBtn.addEventListener("click", () => {
+        setupWizardModal.hide();
+        renderAdminPanel();
+    });
+
+    // --- 名單管理 ---
+    function renderNames() {
+        namesList.innerHTML = "";
+        getNames().forEach(name => {
+            const li = document.createElement("li");
+            li.className = "list-group-item d-flex justify-content-between align-items-center";
+            li.textContent = name;
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "btn btn-danger btn-sm";
+            deleteBtn.textContent = "刪除";
+            deleteBtn.addEventListener("click", () => {
+                removeName(name);
+                renderNames();
+            });
+            li.appendChild(deleteBtn);
+            namesList.appendChild(li);
+        });
     }
-    activeRestaurantId = menuSelect.value;
-    activeMenuItems.push({ id: crypto.randomUUID(), name: '新菜品', price: 100, available: true });
-    persistMenu();
-    renderMenuItems();
-  });
 
-  menuSelect?.addEventListener('change', () => {
-    activeRestaurantId = menuSelect.value;
-    populateMenuEditor();
-  });
-
-  backupToggle?.addEventListener('change', () => {
-    updateSettings({
-      backup: {
-        ...getSettings().backup,
-        enabled: backupToggle.checked,
-        url: backupUrlInput.value
-      }
+    addNameBtn.addEventListener("click", () => {
+        const newNames = namesInput.value.split(",").map(n => n.trim()).filter(n => n !== "");
+        if (newNames.length > 0) {
+            addNames(newNames);
+            namesInput.value = "";
+            renderNames();
+        }
     });
-    showToast('已更新備份設定');
-  });
 
-  backupUrlInput?.addEventListener('blur', () => {
-    updateSettings({
-      backup: {
-        ...getSettings().backup,
-        enabled: backupToggle.checked,
-        url: backupUrlInput.value
-      }
-    });
-  });
+    // --- 餐廳管理 ---
+    function renderRestaurants() {
+        restaurantList.innerHTML = "";
+        getRestaurants().forEach(restaurant => {
+            const li = document.createElement("li");
+            li.className = "list-group-item d-flex justify-content-between align-items-center";
+            li.innerHTML = `
+                <span>${restaurant.name} (${restaurant.tags?.join(", ") || "無標籤"})</span>
+                <div>
+                    <button class="btn btn-info btn-sm me-2 edit-restaurant" data-id="${restaurant.id}">編輯</button>
+                    <button class="btn btn-warning btn-sm me-2 manage-menu" data-id="${restaurant.id}" data-name="${restaurant.name}">管理菜單</button>
+                    <button class="btn btn-danger btn-sm delete-restaurant" data-id="${restaurant.id}">刪除</button>
+                </div>
+            `;
+            restaurantList.appendChild(li);
+        });
 
-  backupNowBtn?.addEventListener('click', async () => {
-    try {
-      await saveDataToServer();
-      showToast('備份完成');
-    } catch (error) {
-      showToast('備份失敗，請檢查設定');
+        document.querySelectorAll(".edit-restaurant").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const id = e.target.dataset.id;
+                const restaurant = getRestaurants().find(r => r.id === id);
+                if (restaurant) {
+                    editingRestaurantId = id;
+                    restaurantNameInput.value = restaurant.name;
+                    restaurantTagsInput.value = restaurant.tags?.join(", ") || "";
+                    restaurantPreorderCheckbox.checked = restaurant.requiresPreorder || false;
+                    addRestaurantBtn.textContent = "更新餐廳";
+                }
+            });
+        });
+
+        document.querySelectorAll(".delete-restaurant").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const id = e.target.dataset.id;
+                if (confirm("確定要刪除這家餐廳嗎？這將會一併刪除其菜單。")) {
+                    removeRestaurant(id);
+                    // Optionally also remove menu here, though app.js handles state
+                    renderRestaurants();
+                }
+            });
+        });
+
+        document.querySelectorAll(".manage-menu").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                editingRestaurantId = e.target.dataset.id;
+                currentRestaurantName.textContent = e.target.dataset.name;
+                const menus = getMenus();
+                restaurantMenuInput.value = JSON.stringify(menus[editingRestaurantId] || [], null, 2);
+                const menuModal = new bootstrap.Modal(document.getElementById("menuModal"));
+                menuModal.show();
+            });
+        });
     }
-  });
 
-  restoreBtn?.addEventListener('click', async () => {
-    if (!confirm('確認從備份還原？目前資料將被覆蓋。')) return;
-    try {
-      const ok = await loadDataFromServer();
-      if (ok) {
-        populateSettings();
+    addRestaurantBtn.addEventListener("click", () => {
+        const name = restaurantNameInput.value.trim();
+        const tags = restaurantTagsInput.value.split(",").map(t => t.trim()).filter(t => t !== "");
+        const requiresPreorder = restaurantPreorderCheckbox.checked;
+
+        if (name === "") {
+            alert("餐廳名稱不能為空！");
+            return;
+        }
+
+        const newRestaurant = {
+            id: editingRestaurantId || `res-${Date.now()}`,
+            name,
+            tags,
+            requiresPreorder,
+        };
+
+        upsertRestaurant(newRestaurant);
+        editingRestaurantId = null;
+        restaurantNameInput.value = "";
+        restaurantTagsInput.value = "";
+        restaurantPreorderCheckbox.checked = false;
+        addRestaurantBtn.textContent = "新增餐廳";
+        renderRestaurants();
+    });
+
+    saveMenuBtn.addEventListener("click", () => {
+        if (editingRestaurantId) {
+            try {
+                const menu = JSON.parse(restaurantMenuInput.value);
+                setMenu(editingRestaurantId, menu);
+                alert("菜單儲存成功！");
+                bootstrap.Modal.getInstance(document.getElementById("menuModal")).hide();
+            } catch (e) {
+                alert("菜單 JSON 格式錯誤！" + e.message);
+            }
+        }
+    });
+
+    // --- 備份與維護 ---
+    function renderBackupSettings() {
+        const settings = getSettings();
+        backupUrlInput.value = settings.backup?.url || "";
+    }
+
+    saveBackupUrlBtn.addEventListener("click", () => {
+        const url = backupUrlInput.value.trim();
+        updateSettings({ backup: { enabled: url !== "", url: url } });
+        alert("備份設定已儲存。");
+        renderBackupSettings();
+    });
+
+    backupNowBtn.addEventListener("click", async () => {
+        backupStatus.textContent = "備份中...";
+        const result = await saveDataToServer();
+        if (result.ok) {
+            backupStatus.textContent = "備份成功！";
+            alert("備份成功！");
+        } else {
+            backupStatus.textContent = `備份失敗: ${result.message}`;
+            alert(`備份失敗: ${result.message}`);
+        }
+    });
+
+    restoreNowBtn.addEventListener("click", async () => {
+        if (!confirm("確定要從備份還原嗎？這將會覆蓋目前的資料！")) return;
+        backupStatus.textContent = "還原中...";
+        const result = await loadDataFromServer();
+        if (result.ok) {
+            backupStatus.textContent = "還原成功！";
+            alert("還原成功！請重新整理頁面以載入最新資料。");
+            // Force reload to ensure all components re-render with new state
+            window.location.reload(); 
+        } else {
+            backupStatus.textContent = `還原失敗: ${result.message}`;
+            alert(`還原失敗: ${result.message}`);
+        }
+    });
+
+    clearOldRecordsBtn.addEventListener("click", () => {
+        if (confirm("確定要清除所有超過 30 天的投票和訂單記錄嗎？此操作不可逆！")) {
+            clearOldRecords();
+            alert("舊記錄已清除。");
+        }
+    });
+
+    // --- QR Code 生成 ---
+    function generateQRCode() {
+        qrCodeContainer.innerHTML = "";
+        const currentUrl = window.location.origin + "/index.html"; // Assuming index.html is the user-facing page
+        new QRCode(qrCodeContainer, {
+            text: currentUrl,
+            width: 128,
+            height: 128,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+        qrCodeLink.href = currentUrl;
+        qrCodeLink.textContent = currentUrl;
+    }
+
+    // --- 初始化管理面板 ---
+    function renderAdminPanel() {
         renderNames();
         renderRestaurants();
-        populateMenuSelector();
-        populateMenuEditor();
-        showToast('還原完成');
-      }
-    } catch (error) {
-      showToast('還原失敗');
+        renderBackupSettings();
+        generateQRCode();
     }
-  });
 
-  clearOldBtn?.addEventListener('click', () => {
-    if (confirm('確定清除 30 天前資料？') && confirm('再次確認：舊資料將無法復原。')) {
-      clearOldRecords(30);
-      showToast('已清除舊資料');
-    }
-  });
+    // 初始檢查 PIN 碼
+    checkAdminPin();
 
-  settingsForm?.addEventListener('change', () => {
-    const formData = new FormData(settingsForm);
-    updateSettings({
-      mode: formData.get('mode'),
-      baseDate: formData.get('baseDate'),
-      timezone: formData.get('timezone'),
-      requiresPreorder: formData.get('requiresPreorder') === 'on'
-    });
-    showToast('設定已儲存');
-  });
+    // 監聽 app.js 的更新事件，重新渲染管理面板
+    window.addEventListener("lunchvote:update", renderAdminPanel);
+});
 
-  namesTextarea?.addEventListener('keydown', (event) => {
-    if (event.metaKey && event.key === 'Enter') {
-      handleNamesImport();
-    }
-  });
-
-  document.getElementById('importNamesBtn')?.addEventListener('click', handleNamesImport);
-  importCsvInput?.addEventListener('change', handleCsvImport);
-
-  function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('visible'));
-    setTimeout(() => {
-      toast.classList.remove('visible');
-      setTimeout(() => toast.remove(), 300);
-    }, 2500);
-  }
-
-  function startWizard() {
-    wizard.classList.remove('hidden');
-    state.wizardStep = 1;
-    renderWizard();
-  }
-
-  function renderWizard() {
-    wizard.querySelectorAll('.wizard-step').forEach((step) => {
-      step.classList.toggle('active', Number(step.dataset.step) === state.wizardStep);
-    });
-  }
-
-  wizard?.addEventListener('click', (event) => {
-    if (event.target.matches('[data-next]')) {
-      state.wizardStep = Math.min(3, state.wizardStep + 1);
-      renderWizard();
-      if (state.wizardStep === 3) {
-        drawPoster();
-      }
-    }
-    if (event.target.matches('[data-prev]')) {
-      state.wizardStep = Math.max(1, state.wizardStep - 1);
-      renderWizard();
-    }
-  });
-
-  function drawPoster() {
-    const canvas = wizardCanvas;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = '#3a6ff7';
-    ctx.fillRect(0, 0, width, 120);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px "Noto Sans TC"';
-    ctx.fillText('LunchVote+ 掃描投票', 40, 80);
-    ctx.fillStyle = '#222';
-    ctx.font = '18px "Noto Sans TC"';
-    ctx.fillText('老師 5 分鐘上線、每天省 20 分鐘統計', 40, 150);
-    const date = getActiveDate();
-    const url = `${location.origin}${location.pathname.replace('admin.html', '')}index.html?d=${date}`;
-    drawPseudoQr(ctx, url, width - 260, height / 2 - 120, 220);
-    ctx.fillText('掃描上方 QR 立即投票/點餐', 40, height - 80);
-    ctx.fillText('讓午餐變簡單，一鍵投票、一鍵下單、一鍵交接', 40, height - 40);
-  }
-
-  function drawPseudoQr(ctx, text, x, y, size) {
-    const bits = pseudoQrMatrix(text, 29);
-    const cell = size / bits.length;
-    ctx.fillStyle = '#000';
-    bits.forEach((row, r) => {
-      row.forEach((bit, c) => {
-        if (bit) {
-          ctx.fillRect(x + c * cell, y + r * cell, cell, cell);
-        }
-      });
-    });
-  }
-
-  function pseudoQrMatrix(text, dimension) {
-    const bits = Array.from({ length: dimension }, () => Array(dimension).fill(0));
-    let hash = 0;
-    for (let i = 0; i < text.length; i += 1) {
-      hash = (hash * 33 + text.charCodeAt(i)) % 0xffffff;
-    }
-    for (let r = 0; r < dimension; r += 1) {
-      for (let c = 0; c < dimension; c += 1) {
-        const value = (hash + r * dimension + c * 7) % 37;
-        bits[r][c] = value % 2 === 0 ? 1 : 0;
-      }
-    }
-    // add finder patterns
-    fillFinder(bits, 0, 0);
-    fillFinder(bits, 0, dimension - 7);
-    fillFinder(bits, dimension - 7, 0);
-    return bits;
-  }
-
-  function fillFinder(bits, row, col) {
-    for (let r = 0; r < 7; r += 1) {
-      for (let c = 0; c < 7; c += 1) {
-        const edge = r === 0 || c === 0 || r === 6 || c === 6;
-        const inner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
-        bits[row + r][col + c] = edge || inner ? 1 : 0;
-      }
-    }
-  }
-
-  wizardDownloadBtn?.addEventListener('click', () => {
-    const link = document.createElement('a');
-    link.href = wizardCanvas.toDataURL('image/png');
-    link.download = `LunchVote_poster_${getActiveDate()}.png`;
-    link.click();
-  });
-
-  wizardStartBtn?.addEventListener('click', startWizard);
-
-  whenReady().then(() => {
-    populateSettings();
-    renderNames();
-    renderRestaurants();
-    populateMenuSelector();
-    populateMenuEditor();
-    const settings = getSettings();
-    if (!settings.baseDate || !getNames().length) {
-      startWizard();
-    }
-  });
-
-  pinForm?.addEventListener('submit', handlePinSubmit);
-  showPinModal();
-}

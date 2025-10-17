@@ -1,109 +1,84 @@
-import {
-  bootstrapApp,
-  whenReady,
-  getOrderHistory,
-  getVoteHistory,
-  getRestaurants,
-  getActiveDate,
-  getOrders,
-  getNames
-} from './app.js';
+import { getActiveDate, getOrders, getNames, getRestaurants, getVoteSummary } from './app.js';
 
-const dashboardPage = document.querySelector('[data-page="dashboard"]');
+document.addEventListener("DOMContentLoaded", async () => {
+    await window.whenReady(); // 等待 app.js 初始化完成
 
-if (dashboardPage) {
-  bootstrapApp();
-  const restaurantCanvas = document.getElementById('chartRestaurants');
-  const dailyCanvas = document.getElementById('chartDaily');
-  const paymentCanvas = document.getElementById('chartPayments');
+    const dashboardSection = document.querySelector("[data-page=\"dashboard\"]");
+    if (!dashboardSection) return;
 
-  function renderCharts() {
-    const ordersHistory = getOrderHistory();
-    const voteHistory = getVoteHistory();
-    const restaurants = getRestaurants(true);
+    const dateDisplay = document.getElementById("dashboard-date-display");
+    const voteSummaryList = document.getElementById("vote-summary-list");
+    const orderSummaryList = document.getElementById("order-summary-list");
+    const totalSalesDisplay = document.getElementById("total-sales");
+    const unpaidCountDisplay = document.getElementById("unpaid-count");
 
-    const restaurantCounts = {};
-    Object.values(voteHistory).forEach((voteByName) => {
-      Object.values(voteByName).forEach((restaurantId) => {
-        restaurantCounts[restaurantId] = (restaurantCounts[restaurantId] || 0) + 1;
-      });
-    });
-    const restaurantLabels = restaurants.map((r) => r.name);
-    const restaurantData = restaurants.map((r) => restaurantCounts[r.id] || 0);
-
-    const dailyTotals = Object.keys(ordersHistory)
-      .sort()
-      .map((date) => ({
-        date,
-        total: Object.values(ordersHistory[date]).reduce((sum, order) => sum + (order.subtotal || 0), 0)
-      }));
-
-    const ordersToday = getOrders(getActiveDate());
-    const names = getNames();
-    const paidCount = names.filter((name) => ordersToday[name]?.paid).length;
-    const unpaidCount = names.length - paidCount;
-
-    new Chart(restaurantCanvas, {
-      type: 'bar',
-      data: {
-        labels: restaurantLabels,
-        datasets: [
-          {
-            label: '票數',
-            data: restaurantData,
-            backgroundColor: '#3a6ff7'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false }
+    function renderDashboard() {
+        const activeDate = getActiveDate();
+        if (!activeDate) {
+            dateDisplay.textContent = "尚未設定基準日期";
+            return;
         }
-      }
-    });
+        dateDisplay.textContent = `儀表板 - ${activeDate}`;
 
-    new Chart(dailyCanvas, {
-      type: 'line',
-      data: {
-        labels: dailyTotals.map((item) => item.date),
-        datasets: [
-          {
-            label: '每日總額',
-            data: dailyTotals.map((item) => item.total),
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.3)',
-            tension: 0.3,
-            fill: true
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          y: { beginAtZero: true }
+        // Render Vote Summary
+        voteSummaryList.innerHTML = \'\';
+        const voteSummary = getVoteSummary(activeDate);
+        if (voteSummary.length === 0) {
+            voteSummaryList.innerHTML = \'<li class="list-group-item">今日尚未有投票記錄。</li>\';
+        } else {
+            voteSummary.sort((a, b) => b.count - a.count).forEach(summary => {
+                const li = document.createElement(\'li\');
+                li.className = \'list-group-item d-flex justify-content-between align-items-center\';
+                li.innerHTML = `
+                    ${summary.name}
+                    <span class="badge bg-primary rounded-pill">${summary.count} 票</span>
+                `;
+                voteSummaryList.appendChild(li);
+            });
         }
-      }
-    });
 
-    new Chart(paymentCanvas, {
-      type: 'pie',
-      data: {
-        labels: ['已付款', '未付款'],
-        datasets: [
-          {
-            data: [paidCount, unpaidCount],
-            backgroundColor: ['#22c55e', '#ef4444']
-          }
-        ]
-      },
-      options: {
-        responsive: true
-      }
-    });
-  }
+        // Render Order Summary
+        orderSummaryList.innerHTML = \'\';
+        const orders = getOrders(activeDate);
+        const names = getNames();
+        const restaurants = getRestaurants();
+        let totalSales = 0;
+        let unpaidCount = 0;
 
-  whenReady().then(() => {
-    renderCharts();
-  });
-}
+        if (names.length === 0) {
+            orderSummaryList.innerHTML = \'<li class="list-group-item">尚未設定名單。</li>\';
+        } else {
+            names.forEach(name => {
+                const order = orders[name];
+                const li = document.createElement(\'li\');
+                li.className = \'list-group-item d-flex justify-content-between align-items-center\';
+
+                if (order && order.items.length > 0) {
+                    const restaurantName = restaurants.find(r => r.id === order.restaurantId)?.name || \'未知餐廳\';
+                    const itemsText = order.items.map(item => `${item.name} x${item.qty}`).join(\'、\');
+                    li.innerHTML = `
+                        ${name} - ${restaurantName}: ${itemsText} ($${order.subtotal || 0})
+                        <span class="badge bg-${order.paid ? \'success\' : \'danger\'} rounded-pill">${order.paid ? \'已付款\' : \'未付款\'}</span>
+                    `;
+                    totalSales += order.subtotal || 0;
+                    if (!order.paid) unpaidCount++;
+                } else {
+                    li.innerHTML = `
+                        ${name}: 尚未點餐
+                        <span class="badge bg-secondary rounded-pill">無訂單</span>
+                    `;
+                }
+                orderSummaryList.appendChild(li);
+            });
+        }
+        totalSalesDisplay.textContent = `$${totalSales}`;
+        unpaidCountDisplay.textContent = `${unpaidCount} 人`;
+    }
+
+    // Listen for updates from app.js
+    window.addEventListener(\'lunchvote:update\', renderDashboard);
+
+    // Initial render
+    renderDashboard();
+});
+

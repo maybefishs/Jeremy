@@ -56,6 +56,14 @@
           </div>
         </div>
         <div id="menuCards" class="card-grid"></div>
+        <div id="order-form" class="order-form hidden">
+          <h3>我的訂單</h3>
+          <ul id="order-items" class="list-group"></ul>
+          <div class="d-flex justify-content-between mt-3">
+            <span>總計：<strong id="order-total">$0</strong></span>
+            <button id="submit-order-btn" class="btn btn-primary">提交訂單</button>
+          </div>
+        </div>
         <!-- 其他點餐相關元件 -->
       </section>
 
@@ -90,5 +98,6 @@
 
     <script type="module" src="./app.js"></script>
     <script type="module" src="./vote.js"></script>
+    <script type="module" src="./order.js"></script>
   </body>
 </html>
