@@ -1,155 +1,88 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LunchVote+ 管理後台</title>
+    <title>LunchVote+ 管理後台 v2.0</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
-    <script>
-      dayjs.extend(window.dayjs_plugin_utc);
-      dayjs.extend(window.dayjs_plugin_timezone);
-    </script>
-  </head>
-  <body data-page="admin">
+</head>
+<body data-page="admin">
     <header class="top-bar">
-      <div class="brand">
-        <span class="badge badge-accent">管理後台</span>
-        <h1>LunchVote+ Admin</h1>
-        <p class="tagline">設定模式、管理菜單、備份資料</p>
-      </div>
+        <div class="brand">
+            <span class="badge badge-accent">管理後台 v2.0</span>
+            <h1>LunchVote+ Admin</h1>
+            <p class="tagline">模組化菜單管理系統</p>
+        </div>
     </header>
 
     <main>
-      <section class="card shell">
-        <h2>營運設定</h2>
-        <form id="settingsForm" class="settings-grid">
-          <label>
-            模式
-            <select name="mode">
-              <option value="vote">投票 + 點餐</option>
-              <option value="direct">直接點餐</option>
+        <section class="card shell">
+            <h2>營運設定</h2>
+            <form id="settingsForm" class="settings-grid">
+                </form>
+        </section>
+
+        <section class="card shell">
+            <h2>名單管理</h2>
+            <div class="names-import">
+                </div>
+            <ul id="namesList" class="names-list"></ul>
+        </section>
+
+        <section class="card shell">
+            <h2>餐廳與菜單 (v2.0)</h2>
+            <select id="restaurantSelect" class="field-group">
+                <option value="">請先選擇要編輯的餐廳</option>
             </select>
-          </label>
-          <label>
-            Base Date
-            <input type="date" name="baseDate" />
-          </label>
-          <label>
-            時區
-            <select name="timezone">
-              <option value="Asia/Taipei">Asia/Taipei</option>
-              <option value="Asia/Tokyo">Asia/Tokyo</option>
-              <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
-              <option value="America/Los_Angeles">America/Los_Angeles</option>
-            </select>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" name="requiresPreorder" />
-            <span>需要預訂</span>
-          </label>
-        </form>
-        <div class="trust-block">備份：資料僅在瀏覽器與指定的 Google 試算表 API 間傳輸。</div>
-      </section>
 
-      <section class="card shell">
-        <h2>名單管理</h2>
-        <div class="names-import">
-          <textarea id="namesTextarea" placeholder="貼上學生姓名，一行一位"></textarea>
-          <div class="import-actions">
-            <button id="importNamesBtn" class="primary" type="button">匯入名單</button>
-            <label class="ghost">
-              匯入 CSV
-              <input id="importCsv" type="file" accept=".csv" hidden />
-            </label>
-          </div>
-        </div>
-        <ul id="namesList" class="names-list"></ul>
-      </section>
-
-      <section class="card shell">
-        <h2>餐廳與菜單</h2>
-        <form id="restaurantForm" class="restaurant-form">
-          <input name="name" type="text" placeholder="餐廳名稱" required />
-          <label class="toggle">
-            <input type="checkbox" name="requiresPreorder" />
-            <span>需要預訂</span>
-          </label>
-          <button type="submit" class="primary">新增餐廳</button>
-        </form>
-        <div id="restaurantsList"></div>
-        <div class="menu-editor">
-          <h3>菜單設定</h3>
-          <select id="menuRestaurantSelect"></select>
-          <div id="menuList"></div>
-          <button id="addMenuItem" class="ghost" type="button">新增品項</button>
-        </div>
-      </section>
-
-      <section class="card shell">
-        <h2>備份與維運</h2>
-        <div class="backup-grid">
-          <label class="toggle">
-            <input id="backupToggle" type="checkbox" />
-            <span>每日 10:05 自動備份</span>
-          </label>
-          <input id="backupUrl" type="url" placeholder="Google Apps Script / API URL" />
-          <div class="backup-actions">
-            <button id="backupNow" class="ghost" type="button">立即備份</button>
-            <button id="restoreBackup" class="ghost" type="button">從備份還原</button>
-          </div>
-          <button id="clearOldRecords" class="danger" type="button">清除 30 天前資料</button>
-        </div>
-      </section>
-
-      <section class="card shell hidden" id="setupWizard">
-        <div class="wizard-step" data-step="1">
-          <h2>Step 1 — 匯入名單</h2>
-          <p>貼上或上傳 CSV，快速建立學生名單。</p>
-          <button data-next class="primary" type="button">下一步</button>
-        </div>
-        <div class="wizard-step" data-step="2">
-          <h2>Step 2 — 選擇模式與日期</h2>
-          <p>在上方營運設定中選擇模式、日期與時區。</p>
-          <div class="wizard-nav">
-            <button data-prev class="ghost" type="button">上一步</button>
-            <button data-next class="primary" type="button">下一步</button>
-          </div>
-        </div>
-        <div class="wizard-step" data-step="3">
-          <h2>Step 3 — 產生 QR 海報</h2>
-          <canvas id="wizardCanvas" width="800" height="1000"></canvas>
-          <div class="wizard-nav">
-            <button data-prev class="ghost" type="button">上一步</button>
-            <button id="downloadPoster" class="primary" type="button">下載海報 PNG</button>
-          </div>
-        </div>
-      </section>
-
-      <button id="startWizard" class="ghost" type="button">重新啟動設定精靈</button>
+            <div id="menuEditorV2" class="hidden">
+                <h3>分類管理</h3>
+                <form id="categoryForm" class="category-form">
+                    <input type="text" id="categoryName" placeholder="輸入分類名稱 (e.g., 麵類)" required/>
+                    <button type="submit" class="ghost">新增分類</button>
+                </form>
+                <div id="categoryContainer" class="category-container">
+                    </div>
+            </div>
+        </section>
+        
+        <section class="card shell">
+            <h2>備份與維運</h2>
+            </section>
     </main>
 
-    <div id="pinModal" class="modal">
-      <form id="pinForm" class="modal-content">
-        <h2>輸入管理 PIN</h2>
-        <input id="pinInput" type="password" placeholder="PIN" required />
-        <p id="pinError" class="error"></p>
-        <button class="primary" type="submit">解鎖</button>
-      </form>
-      <div id="setPinPanel" class="modal-content hidden">
-        <h2>設定新的 PIN</h2>
-        <form id="setPinForm">
-          <input id="newPin" type="password" placeholder="新 PIN (至少 4 位)" required />
-          <input id="confirmPin" type="password" placeholder="再次輸入" required />
-          <p id="setPinError" class="error"></p>
-          <button class="primary" type="submit">設定</button>
-        </form>
-      </div>
+    <div id="itemEditorModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="modalTitle">編輯品項</h2>
+            <form id="itemEditorForm">
+                <input type="hidden" name="itemId">
+                <input type="hidden" name="categoryId">
+                
+                <label>品項名稱: <input type="text" name="name" required></label>
+                <label>基礎價格: <input type="number" name="basePrice" required min="0"></label>
+                <label>單位 (e.g., 顆, 份): <input type="text" name="unit"></label>
+                <label>圖片網址: <input type="url" name="imageUrl" placeholder="https://..."></label>
+
+                <hr>
+                <h3>選項群組</h3>
+                <div id="optionGroupsContainer"></div>
+                <button type="button" id="addOptionGroupBtn" class="ghost">新增選項群組</button>
+                
+                <div class="modal-actions">
+                    <button type="button" class="ghost" onclick="document.getElementById('itemEditorModal').classList.add('hidden')">取消</button>
+                    <button type="submit" class="primary">儲存品項</button>
+                </div>
+            </form>
+        </div>
     </div>
+
+    <div id="pinModal" class="modal">
+        </div>
 
     <script type="module" src="./app.js"></script>
     <script type="module" src="./admin.js"></script>
-  </body>
+</body>
 </html>
