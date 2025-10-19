@@ -8,8 +8,7 @@ import {
   getOrder,
   getOrders,
   getNames,
-  // Make sure computeTotals is exported from app.js if needed elsewhere
-  // computeTotals 
+  UPDATE_EVENT,
 } from './app.js';
 
 const NAME_STORAGE_KEY = 'lunchvote-user-name';
@@ -69,24 +68,46 @@ if (orderSection) {
   }
   
   function loadWorkingOrder() {
-      const name = resolveName();
-      if (!name) {
-          workingOrder = { restaurantId: restaurantSelect ? restaurantSelect.value : '', items: [], note: '', paid: false };
-          renderMenu(); 
-          updateBottomBar();
-          return;
+    const name = resolveName();
+    if (!name) {
+      workingOrder = {
+        restaurantId: restaurantSelect ? restaurantSelect.value : '',
+        items: [],
+        note: '',
+        paid: false,
       };
-
-      const saved = getOrder(getActiveDate(), name);
-      if (saved && saved.restaurantId === (restaurantSelect ? restaurantSelect.value : workingOrder.restaurantId) ) { // Load only if restaurant matches
-          workingOrder = JSON.parse(JSON.stringify(saved));
-      } else {
-          // Reset items if no saved order or restaurant mismatch
-          workingOrder = { restaurantId: restaurantSelect ? restaurantSelect.value : '', items: [], note: '', paid: false };
-      }
-      
       renderMenu();
       updateBottomBar();
+      return;
+    }
+
+    const saved = getOrder(getActiveDate(), name);
+
+    if (saved) {
+      // Deep clone so local edits don't mutate the shared state until persisted
+      workingOrder = JSON.parse(JSON.stringify(saved));
+
+      if (restaurantSelect) {
+        const hasSavedRestaurant = Array.from(restaurantSelect.options).some(
+          option => option.value === saved.restaurantId,
+        );
+
+        if (hasSavedRestaurant) {
+          restaurantSelect.value = saved.restaurantId;
+        }
+      }
+    } else {
+      // Reset items if no saved order is found
+      workingOrder = {
+        restaurantId: restaurantSelect ? restaurantSelect.value : '',
+        items: [],
+        note: '',
+        paid: false,
+      };
+    }
+
+    renderMenu();
+    updateBottomBar();
   }
 
   function renderRestaurants() {
@@ -115,7 +136,9 @@ if (orderSection) {
 
   // **** MODIFIED renderMenu Function ****
   function renderMenu() {
-    const restaurantId = restaurantSelect ? restaurantSelect.value : workingOrder.restaurantId;
+    const restaurantId = restaurantSelect && restaurantSelect.value
+        ? restaurantSelect.value
+        : workingOrder.restaurantId;
     menuContainer.innerHTML = ''; // Clear previous content first
 
     if (!restaurantId) {
@@ -338,26 +361,23 @@ if (orderSection) {
   
   // Need a function to calculate totals for the bottom bar
   function computeTotals(date) {
-      const orders = getOrders(date) || {};
-      let classTotal = 0;
-      const unpaid = [];
-      const allNames = getNames();
-      const orderedNames = Object.keys(orders);
-      
-      allNames.forEach(name => {
-          const order = orders[name];
-          if (order) {
-              const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
-              classTotal += subtotal;
-              if (!order.paid) {
-                  unpaid.push(name);
-              }
-          }
-      });
-      
-      const missing = allNames.filter(name => !orderedNames.includes(name));
+    const orders = getOrders(date) || {};
+    let classTotal = 0;
+    const unpaid = [];
+    const allNames = getNames();
 
-      return { classTotal, unpaid, missing };
+    Object.entries(orders).forEach(([name, order]) => {
+      const items = Array.isArray(order.items) ? order.items : [];
+      const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+      classTotal += subtotal;
+      if (!order.paid) {
+        unpaid.push(name);
+      }
+    });
+
+    const missing = allNames.filter(name => !orders[name]);
+
+    return { classTotal, unpaid, missing };
   }
 
 
@@ -384,9 +404,16 @@ if (orderSection) {
   userSelect?.addEventListener('change', () => {
       currentName = resolveName();
       localStorage.setItem(NAME_STORAGE_KEY, currentName); // Save selected name
+      if (userSelect.value === 'other') {
+        customNameInput?.classList.remove('hidden');
+        customNameInput?.focus();
+      } else if (customNameInput) {
+        customNameInput.classList.add('hidden');
+        customNameInput.value = '';
+      }
       loadWorkingOrder();
   });
-  
+
   customNameInput?.addEventListener('blur', () => {
       currentName = resolveName();
       localStorage.setItem(NAME_STORAGE_KEY, currentName); // Save custom name
@@ -429,11 +456,16 @@ if (orderSection) {
     renderRestaurants(); // Populate restaurant dropdown
     loadWorkingOrder(); // Load order based on initial name and selected restaurant
     
-    window.addEventListener('lunchvote:update', () => {
+    if (customNameInput && userSelect && userSelect.value !== 'other') {
+        customNameInput.classList.add('hidden');
+        customNameInput.value = '';
+    }
+
+    window.addEventListener(UPDATE_EVENT, () => {
         // More granular updates might be better, but for now, refresh relevant parts
-        renderRestaurants(); 
+        renderRestaurants();
         // Re-check current user's order state in case of external changes (less likely here)
-        loadWorkingOrder(); 
+        loadWorkingOrder();
         updateBottomBar(); // Always update totals based on global state
     });
   });

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'lunchvote-v1';
+const CACHE_VERSION = 'lunchvote-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -13,8 +13,7 @@ const APP_SHELL = [
   './admin.js',
   './dashboard.js',
   './manifest.json',
-  './icons/192.png',
-  './icons/512.png'
+  './lunchvote.png'
 ];
 
 self.addEventListener('install', (event) => {
