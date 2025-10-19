@@ -1,6 +1,8 @@
 // [生產級穩定版 v5.0 - 請完整複製並覆蓋 app.js]
 
-const STORAGE_KEY = 'lunchvote-plus';
+// ===== Google Apps Script 後端 URL =====
+// 請將此 URL 替換為您在步驟 2.3 中複製的網頁應用程式網址
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/d/YOUR_SCRIPT_ID/usercontent';
 const UPDATE_EVENT = 'lunchvote:update';
 const PHASE_EVENT = 'lunchvote:phase';
 
@@ -38,48 +40,63 @@ function whenReady() {
   return readyPromise;
 }
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      const mergedState = { ...DEFAULT_STATE, ...parsed };
-      mergedState.settings = { ...DEFAULT_STATE.settings, ...(parsed.settings || {}) };
-      return mergedState;
-    } catch (error) { console.error('解析儲存狀態失敗', error); }
+async function loadState() {
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-cache'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      ...DEFAULT_STATE,
+      ...data,
+      settings: { ...DEFAULT_STATE.settings, ...data.settings },
+    };
+  } catch (error) {
+    console.error('無法從 Google Sheets 讀取資料，使用本地預設狀態:', error);
+    return JSON.parse(JSON.stringify(DEFAULT_STATE));
   }
-  return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
 
-function persistState(triggerEvent = true) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (triggerEvent) {
-    window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: JSON.parse(JSON.stringify(state)) }));
+async function persistState(triggerEvent = true) {
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'cors',
+      cache: 'no-cache',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(state)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (triggerEvent) {
+      window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: JSON.parse(JSON.stringify(state)) }));
+    }
+
+    return result;
+  } catch (error) {
+    console.error('無法將資料儲存到 Google Sheets:', error);
   }
 }
 
 // --- 資料初始化 ---
-async function fetchJSON(url) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`無法載入 ${url}`);
-    return await response.json();
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
-}
-
+// 此函式保留為佔位以維持向後相容；資料已由 loadState() 從遠端載入。
 async function initializeData() {
-  if (state.names.length === 0 || state.restaurants.length === 0) {
-    const [names, seedData, menus] = await Promise.all([
-      fetchJSON('./data/names.json'), fetchJSON('./data/seed.json'), fetchJSON('./data/menus.json')
-    ]);
-    if (names) state.names = names;
-    if (seedData && seedData.restaurants) state.restaurants = seedData.restaurants;
-    if (menus) state.menus = menus;
-    persistState(false);
-  }
+  // 所有資料已在 loadState() 中從 Google Sheets 讀取
 }
 
 // --- 時間 & PIN 碼邏輯 ---
@@ -97,22 +114,24 @@ async function setPin(pin) {
   state.settings.pinHash = await simpleHash(pin);
   state.settings.pinAttempts = 0;
   state.settings.pinLockout = null;
-  persistState();
+  await persistState();
 }
 
 async function verifyPin(pin) {
   const { settings } = state;
   if (!settings.pinHash) return { ok: true, reason: 'not_set' };
   if (settings.pinLockout && Date.now() < settings.pinLockout) return { ok: false, reason: 'locked', unlockAt: settings.pinLockout };
-  
+
   const hash = await simpleHash(pin);
   if (hash === settings.pinHash) {
     settings.pinAttempts = 0;
-    persistState(false); return { ok: true };
+    await persistState(false);
+    return { ok: true };
   } else {
     settings.pinAttempts = (settings.pinAttempts || 0) + 1;
     if (settings.pinAttempts >= 5) settings.pinLockout = Date.now() + 5 * 60 * 1000;
-    persistState(false); return { ok: false, reason: 'incorrect' };
+    await persistState(false);
+    return { ok: false, reason: 'incorrect' };
   }
 }
 
@@ -499,11 +518,10 @@ async function bootstrapApp() {
   if (state) return;
   dayjs.extend(window.dayjs_plugin_utc);
   dayjs.extend(window.dayjs_plugin_timezone);
-  state = loadState();
+  state = await loadState();
   if (!state.settings.baseDate) {
     state.settings.baseDate = dayjs().tz(state.settings.timezone).format('YYYY-MM-DD');
   }
-  await initializeData();
   renderUI();
   emitPhaseEvent();
 
