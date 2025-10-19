@@ -361,26 +361,23 @@ if (orderSection) {
   
   // Need a function to calculate totals for the bottom bar
   function computeTotals(date) {
-      const orders = getOrders(date) || {};
-      let classTotal = 0;
-      const unpaid = [];
-      const allNames = getNames();
-      const orderedNames = Object.keys(orders);
-      
-      allNames.forEach(name => {
-          const order = orders[name];
-          if (order) {
-              const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
-              classTotal += subtotal;
-              if (!order.paid) {
-                  unpaid.push(name);
-              }
-          }
-      });
-      
-      const missing = allNames.filter(name => !orderedNames.includes(name));
+    const orders = getOrders(date) || {};
+    let classTotal = 0;
+    const unpaid = [];
+    const allNames = getNames();
 
-      return { classTotal, unpaid, missing };
+    Object.entries(orders).forEach(([name, order]) => {
+      const items = Array.isArray(order.items) ? order.items : [];
+      const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+      classTotal += subtotal;
+      if (!order.paid) {
+        unpaid.push(name);
+      }
+    });
+
+    const missing = allNames.filter(name => !orders[name]);
+
+    return { classTotal, unpaid, missing };
   }
 
 
