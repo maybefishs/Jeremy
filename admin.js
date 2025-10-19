@@ -27,6 +27,8 @@ if (adminPage) {
   // --- DOM Elements ---
   const pinModal = document.getElementById('pinModal');
   const settingsForm = document.getElementById('settingsForm');
+  const voteCutoffInput = document.getElementById('voteCutoff-input');
+  const orderCutoffInput = document.getElementById('orderCutoff-input');
   const namesList = document.getElementById('namesList');
   const namesTextarea = document.getElementById('namesTextarea');
   const importCsvInput = document.getElementById('importCsv');
@@ -127,6 +129,8 @@ if (adminPage) {
     if(settingsForm && settingsForm.mode) settingsForm.mode.value = settings.mode;
     if(settingsForm && settingsForm.baseDate) settingsForm.baseDate.value = settings.baseDate;
     if(settingsForm && settingsForm.timezone) settingsForm.timezone.value = settings.timezone;
+    if(voteCutoffInput) voteCutoffInput.value = settings.voteCutoff || '';
+    if(orderCutoffInput) orderCutoffInput.value = settings.orderCutoff || '';
     if(settingsForm && settingsForm.requiresPreorder) settingsForm.requiresPreorder.checked = !!settings.requiresPreorder;
     if(backupToggle) backupToggle.checked = !!settings.backup?.enabled;
     if(backupUrlInput) backupUrlInput.value = settings.backup?.url || '';
@@ -448,7 +452,14 @@ if (adminPage) {
     namesTextarea?.addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') handleNamesImport(); });
     settingsForm?.addEventListener('change', () => {
         const formData = new FormData(settingsForm);
-        updateSettings({ mode: formData.get('mode'), baseDate: formData.get('baseDate'), timezone: formData.get('timezone'), requiresPreorder: formData.get('requiresPreorder') === 'on' });
+        updateSettings({
+          mode: formData.get('mode'),
+          baseDate: formData.get('baseDate'),
+          timezone: formData.get('timezone'),
+          voteCutoff: formData.get('voteCutoff') || '',
+          orderCutoff: formData.get('orderCutoff') || '',
+          requiresPreorder: formData.get('requiresPreorder') === 'on'
+        });
         showToast('設定已儲存');
     });
     backupToggle?.addEventListener('change', () => updateSettings({ backup: { ...getSettings().backup, enabled: backupToggle.checked, url: backupUrlInput.value }}));

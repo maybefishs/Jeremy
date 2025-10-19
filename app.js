@@ -11,6 +11,8 @@ const DEFAULT_STATE = {
     requiresPreorder: false,
     baseDate: null,
     timezone: 'Asia/Taipei',
+    voteCutoff: '',
+    orderCutoff: '',
     voteLocked: false,
     orderLocked: false,
     pinHash: null,
@@ -124,7 +126,9 @@ function updateSettings(newSettings) {
     newSettings && (
       ('mode' in newSettings && newSettings.mode !== previousMode) ||
       'baseDate' in newSettings ||
-      'orderLocked' in newSettings
+      'orderLocked' in newSettings ||
+      'voteCutoff' in newSettings ||
+      'orderCutoff' in newSettings
     )
   );
   if (shouldEmit) {
@@ -330,7 +334,37 @@ function lockOrder() {
   emitPhaseEvent();
 }
 function computePhaseDeadlines() {
-  return { vote: '--:--', order: '--:--' };
+  if (!state || !state.settings) return { vote: '--:--', order: '--:--' };
+  const { baseDate, timezone, voteCutoff, orderCutoff } = state.settings;
+  if (!baseDate) return { vote: '--:--', order: '--:--' };
+
+  if (typeof dayjs === 'undefined' || !dayjs.tz) {
+    return { vote: '--:--', order: '--:--' };
+  }
+
+  const tz = timezone || dayjs.tz.guess();
+  const base = dayjs.tz(baseDate, 'YYYY-MM-DD', tz);
+  if (!base.isValid()) {
+    return { vote: '--:--', order: '--:--' };
+  }
+
+  const parseCutoff = (timeString) => {
+    if (!timeString || typeof timeString !== 'string') return null;
+    const match = timeString.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (Number.isNaN(hour) || Number.isNaN(minute) || hour > 23 || minute > 59) return null;
+    return base.hour(hour).minute(minute).second(0).millisecond(0);
+  };
+
+  const voteTime = parseCutoff(voteCutoff);
+  const orderTime = parseCutoff(orderCutoff);
+
+  return {
+    vote: voteTime ? voteTime.format('HH:mm') : '--:--',
+    order: orderTime ? orderTime.format('HH:mm') : '--:--'
+  };
 }
 function emitPhaseEvent() {
   if (!state) return;
@@ -366,8 +400,59 @@ function clearOldRecords(days) {
     Object.keys(state.orders).forEach(date => { if (date < cutoff) delete state.orders[date]; });
     persistState();
 }
-async function saveDataToServer() { console.log("saveDataToServer called - needs implementation"); }
-async function loadDataFromServer() { console.log("loadDataFromServer called - needs implementation"); }
+async function saveDataToServer() {
+  const backup = state?.settings?.backup;
+  if (!backup?.enabled || !backup.url) {
+    throw new Error('未設定備份端點');
+  }
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    state: JSON.parse(JSON.stringify(state))
+  };
+
+  const response = await fetch(backup.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => '');
+    throw new Error(message || '備份失敗');
+  }
+}
+
+async function loadDataFromServer() {
+  const backup = state?.settings?.backup;
+  if (!backup?.enabled || !backup.url) {
+    throw new Error('未設定備份端點');
+  }
+
+  const response = await fetch(backup.url);
+  if (!response.ok) {
+    const message = await response.text().catch(() => '');
+    throw new Error(message || '還原失敗');
+  }
+
+  const payload = await response.json().catch(() => null);
+  const incomingState = payload && typeof payload === 'object'
+    ? (payload.state && typeof payload.state === 'object' ? payload.state : payload)
+    : null;
+
+  if (!incomingState) {
+    throw new Error('備份資料格式不正確');
+  }
+
+  state = {
+    ...JSON.parse(JSON.stringify(DEFAULT_STATE)),
+    ...incomingState,
+    settings: { ...DEFAULT_STATE.settings, ...(incomingState.settings || {}) }
+  };
+
+  persistState();
+  emitPhaseEvent();
+}
 
 // --- UI 渲染 ---
 function renderNameOptions(selectElement) {
