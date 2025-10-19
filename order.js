@@ -8,8 +8,7 @@ import {
   getOrder,
   getOrders,
   getNames,
-  // Make sure computeTotals is exported from app.js if needed elsewhere
-  // computeTotals 
+  UPDATE_EVENT,
 } from './app.js';
 
 const NAME_STORAGE_KEY = 'lunchvote-user-name';
@@ -384,9 +383,16 @@ if (orderSection) {
   userSelect?.addEventListener('change', () => {
       currentName = resolveName();
       localStorage.setItem(NAME_STORAGE_KEY, currentName); // Save selected name
+      if (userSelect.value === 'other') {
+        customNameInput?.classList.remove('hidden');
+        customNameInput?.focus();
+      } else if (customNameInput) {
+        customNameInput.classList.add('hidden');
+        customNameInput.value = '';
+      }
       loadWorkingOrder();
   });
-  
+
   customNameInput?.addEventListener('blur', () => {
       currentName = resolveName();
       localStorage.setItem(NAME_STORAGE_KEY, currentName); // Save custom name
@@ -429,11 +435,16 @@ if (orderSection) {
     renderRestaurants(); // Populate restaurant dropdown
     loadWorkingOrder(); // Load order based on initial name and selected restaurant
     
-    window.addEventListener('lunchvote:update', () => {
+    if (customNameInput && userSelect && userSelect.value !== 'other') {
+        customNameInput.classList.add('hidden');
+        customNameInput.value = '';
+    }
+
+    window.addEventListener(UPDATE_EVENT, () => {
         // More granular updates might be better, but for now, refresh relevant parts
-        renderRestaurants(); 
+        renderRestaurants();
         // Re-check current user's order state in case of external changes (less likely here)
-        loadWorkingOrder(); 
+        loadWorkingOrder();
         updateBottomBar(); // Always update totals based on global state
     });
   });

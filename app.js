@@ -522,6 +522,7 @@ window.LunchVote = {
 
 // --- 導出所有需要的函式 ---
 export {
+  UPDATE_EVENT,
   bootstrapApp, whenReady, getSettings, updateSettings, getActiveDate,
   getNames, addNames, removeName, getRestaurants, getRestaurantById,
   upsertRestaurant, removeRestaurant, getMenus, setMenu, recordVote,

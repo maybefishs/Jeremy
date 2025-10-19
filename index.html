@@ -47,11 +47,21 @@
           <h2>點餐階段</h2>
           <p>挑選菜單，送出後可隨時修改。</p>
         </header>
-         <div class="field-group">
+        <div class="field-group">
           <label for="user-select-order">我是</label>
           <div class="name-picker">
             <select id="user-select-order"></select>
+            <input
+              id="customNameInputOrder"
+              class="hidden"
+              type="text"
+              placeholder="輸入姓名"
+            />
           </div>
+        </div>
+        <div class="field-group">
+          <label for="user-select-order-restaurant">選擇餐廳</label>
+          <select id="user-select-order-restaurant"></select>
         </div>
         <div id="menuContainer"></div>
       </section>
