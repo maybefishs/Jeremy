@@ -8,8 +8,7 @@ import {
   getOrder,
   getOrders,
   getNames,
-  // Make sure computeTotals is exported from app.js if needed elsewhere
-  // computeTotals 
+  computeTotals // <--- Import it from app.js now
 } from './app.js';
 
 const NAME_STORAGE_KEY = 'lunchvote-user-name';
@@ -336,30 +335,6 @@ if (orderSection) {
     }
   }
   
-  // Need a function to calculate totals for the bottom bar
-  function computeTotals(date) {
-      const orders = getOrders(date) || {};
-      let classTotal = 0;
-      const unpaid = [];
-      const allNames = getNames();
-      const orderedNames = Object.keys(orders);
-      
-      allNames.forEach(name => {
-          const order = orders[name];
-          if (order) {
-              const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
-              classTotal += subtotal;
-              if (!order.paid) {
-                  unpaid.push(name);
-              }
-          }
-      });
-      
-      const missing = allNames.filter(name => !orderedNames.includes(name));
-
-      return { classTotal, unpaid, missing };
-  }
-
 
   function updateBottomBar() {
       const subtotal = workingOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
