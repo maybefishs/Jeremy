@@ -7,8 +7,9 @@ import {
   setOrder,
   getOrder,
   getOrders,
-  getNames
-  // computeTotals and other utilities might need to be imported if they are in app.js
+  getNames,
+  // Make sure computeTotals is exported from app.js if needed elsewhere
+  // computeTotals 
 } from './app.js';
 
 const NAME_STORAGE_KEY = 'lunchvote-user-name';
@@ -19,10 +20,11 @@ if (orderSection) {
   bootstrapApp();
   
   // --- DOM Elements ---
-  const restaurantSelect = document.getElementById('user-select-order-restaurant'); // Assuming a new select for restaurants
+  const restaurantSelect = document.getElementById('user-select-order-restaurant'); 
   const menuContainer = document.getElementById('menuContainer');
   const userSelect = document.getElementById('user-select-order');
-  const customNameInput = document.getElementById('customNameInput'); // Assuming it's shared or there's a new one
+  // NOTE: Ensure customNameInput exists and is correctly selected in index.html if using 'other' option
+  const customNameInput = document.getElementById('customNameInputOrder'); // Example ID, adjust if needed
 
   // Modal elements
   const itemOptionsModal = document.getElementById('itemOptionsModal');
@@ -33,18 +35,21 @@ if (orderSection) {
   const itemOptionsPrice = document.getElementById('itemOptionsPrice');
   const cancelOptionsBtn = document.getElementById('cancelOptionsBtn');
   
-  // Footer elements
+  // Footer elements (ensure these IDs exist in index.html footer)
   const personalSubtotalEl = document.getElementById('personalSubtotal');
-  // ... other footer elements
+  const classTotalEl = document.getElementById('classTotal'); 
+  const unpaidEl = document.getElementById('unpaidCount');
+  const missingEl = document.getElementById('missingOrders');
 
   // --- State ---
   let currentName = localStorage.getItem(NAME_STORAGE_KEY) || '';
   let workingOrder = { restaurantId: '', items: [], note: '', paid: false };
-  let currentItemWithOptions = null; // To hold the item being configured in the modal
+  let currentItemWithOptions = null; 
 
   // --- Functions ---
 
   function showToast(message) {
+    // ... (keep existing showToast function)
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.textContent = message;
@@ -57,7 +62,7 @@ if (orderSection) {
   }
 
   function resolveName() {
-    if (userSelect.value === 'other') {
+    if (userSelect.value === 'other' && customNameInput) {
       return customNameInput.value.trim();
     }
     return userSelect.value;
@@ -66,80 +71,121 @@ if (orderSection) {
   function loadWorkingOrder() {
       const name = resolveName();
       if (!name) {
-          workingOrder = { restaurantId: '', items: [], note: '', paid: false };
-          renderMenu(); // Render empty state
+          workingOrder = { restaurantId: restaurantSelect ? restaurantSelect.value : '', items: [], note: '', paid: false };
+          renderMenu(); 
           updateBottomBar();
           return;
       };
 
       const saved = getOrder(getActiveDate(), name);
-      if (saved) {
+      if (saved && saved.restaurantId === (restaurantSelect ? restaurantSelect.value : workingOrder.restaurantId) ) { // Load only if restaurant matches
           workingOrder = JSON.parse(JSON.stringify(saved));
       } else {
-          // Reset if no saved order
-          workingOrder = { restaurantId: workingOrder.restaurantId, items: [], note: '', paid: false };
+          // Reset items if no saved order or restaurant mismatch
+          workingOrder = { restaurantId: restaurantSelect ? restaurantSelect.value : '', items: [], note: '', paid: false };
       }
       
-      // Keep selected restaurant if any
-      if (restaurantSelect) {
-        workingOrder.restaurantId = restaurantSelect.value;
-      }
-
       renderMenu();
       updateBottomBar();
   }
 
   function renderRestaurants() {
     const restaurants = getRestaurants(true);
-    // This function now populates a dedicated restaurant selector on the order page
-    // Assuming you add <select id="user-select-order-restaurant"></select> in index.html
-    const restaurantSelectOrder = document.getElementById('user-select-order-restaurant');
-    if (!restaurantSelectOrder) return;
+    if (!restaurantSelect) return;
 
-    restaurantSelectOrder.innerHTML = '<option value="">請選擇餐廳</option>';
+    const currentVal = restaurantSelect.value; // Store current value before clearing
+
+    restaurantSelect.innerHTML = '<option value="">請選擇餐廳</option>';
     restaurants.forEach(r => {
       const option = document.createElement('option');
       option.value = r.id;
       option.textContent = r.name;
-      restaurantSelectOrder.appendChild(option);
+      restaurantSelect.appendChild(option);
     });
 
-    if (workingOrder.restaurantId) {
-        restaurantSelectOrder.value = workingOrder.restaurantId;
+    // Try to restore previous selection or working order's restaurant
+    if (restaurants.find(r => r.id === currentVal)) {
+        restaurantSelect.value = currentVal;
+    } else if (workingOrder.restaurantId && restaurants.find(r => r.id === workingOrder.restaurantId)) {
+        restaurantSelect.value = workingOrder.restaurantId;
+    } else {
+        restaurantSelect.value = ''; // Reset if previous/working is invalid
     }
   }
 
+  // **** MODIFIED renderMenu Function ****
   function renderMenu() {
     const restaurantId = restaurantSelect ? restaurantSelect.value : workingOrder.restaurantId;
+    menuContainer.innerHTML = ''; // Clear previous content first
+
     if (!restaurantId) {
       menuContainer.innerHTML = '<p class="empty">請先選擇餐廳</p>';
       return;
     }
     
     const menu = getMenus()[restaurantId];
-    if (!menu || !menu.items) {
-      menuContainer.innerHTML = '<p class="empty">此餐廳尚未設定菜單</p>';
+    if (!menu) {
+      menuContainer.innerHTML = '<p class="empty">此餐廳尚未設定菜單資料</p>';
       return;
     }
     
-    menuContainer.innerHTML = '';
+    // --- NEW: Render Menu Images First ---
+    if (menu.menuImages && menu.menuImages.length > 0) {
+        const imagesDiv = document.createElement('div');
+        imagesDiv.className = 'menu-images-display'; // Add a class for potential styling
+        menu.menuImages.forEach(url => {
+            if (url) { // Only render if URL is not empty
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = `${menu.name} Menu`;
+                img.style.maxWidth = '100%'; // Basic styling
+                img.style.marginBottom = '1rem';
+                imagesDiv.appendChild(img);
+            }
+        });
+        menuContainer.appendChild(imagesDiv); // Prepend images to the container
+    }
+    // --- END NEW ---
+
+    if (!menu.items || menu.items.length === 0) {
+        // Append message only if no items AND no images were rendered previously
+        if (menuContainer.innerHTML === '' || menuContainer.querySelector('.menu-images-display')?.children.length === 0) {
+             menuContainer.innerHTML = '<p class="empty">此餐廳尚未設定任何品項</p>';
+        } else {
+             // If images were shown, add a separator or message below them
+             const noItemsMsg = document.createElement('p');
+             noItemsMsg.className = 'empty';
+             noItemsMsg.textContent = '此餐廳尚未設定任何品項';
+             menuContainer.appendChild(noItemsMsg);
+        }
+        return; 
+    }
     
-    menu.categories.forEach(category => {
+    // Render Categories and Items (Existing Logic)
+    (menu.categories || []).forEach(category => {
+      const itemsInCategory = menu.items.filter(item => item.categoryId === category.id);
+      if (itemsInCategory.length === 0) return; // Skip empty categories
+
       const categoryEl = document.createElement('div');
       categoryEl.className = 'menu-category';
       categoryEl.innerHTML = `<h3>${category.name}</h3>`;
       const itemsGrid = document.createElement('div');
       itemsGrid.className = 'card-grid';
 
-      const itemsInCategory = menu.items.filter(item => item.categoryId === category.id);
       itemsInCategory.forEach(item => {
         const card = document.createElement('div');
-        card.className = `card menu-card ${item.available === false ? 'disabled' : ''}`;
+        // Add cursor pointer only if not disabled
+        card.className = `card menu-card ${item.available === false ? 'disabled' : ''}`; 
+        if (item.available !== false) {
+            card.style.cursor = 'pointer'; 
+        }
         card.dataset.itemId = item.id;
         card.innerHTML = `
-            ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" class="card-img">` : ''}
-            <div class="card-title">${item.name}</div>
-            <div class="card-meta">$${item.basePrice}</div>
+            ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" class="card-img" style="max-width: 100%; height: auto; aspect-ratio: 16/9; object-fit: cover; border-radius: var(--radius-md) var(--radius-md) 0 0;">` : ''}
+            <div style="padding: ${item.imageUrl ? '0 10px 10px' : '0'};"> 
+                <div class="card-title">${item.name}</div>
+                <div class="card-meta">$${item.basePrice}${item.unit ? ` / ${item.unit}` : ''}</div>
+            </div>
         `;
         itemsGrid.appendChild(card);
       });
@@ -155,20 +201,21 @@ if (orderSection) {
       
       const itemId = card.dataset.itemId;
       const restaurantId = restaurantSelect.value;
+      if (!restaurantId) return; // Should not happen if menu is rendered
+      
       const item = getMenus()[restaurantId]?.items.find(i => i.id === itemId);
-
       if (!item) return;
 
       if (!item.optionGroups || item.optionGroups.length === 0) {
-          // Simple item, add directly
           addItemToOrder({
-              ...item,
+              id: item.id,
+              name: item.name,
               qty: 1,
-              price: item.basePrice // Final price for simple items
+              price: item.basePrice, 
+              options: '' // Indicate no options
           });
           showToast(`已加入一份 ${item.name}`);
       } else {
-          // Complex item, open modal
           openItemOptionsModal(item);
       }
   }
@@ -179,7 +226,9 @@ if (orderSection) {
       itemOptionsQty.textContent = '1';
       itemOptionsContainer.innerHTML = '';
 
-      item.optionGroups.forEach(group => {
+      (item.optionGroups || []).forEach(group => {
+          if (!group.options || group.options.length === 0) return; // Skip empty groups
+
           const groupEl = document.createElement('div');
           groupEl.className = 'option-group';
           groupEl.innerHTML = `<label>${group.name}</label>`;
@@ -187,15 +236,20 @@ if (orderSection) {
           optionsWrapper.className = 'options-wrapper';
 
           group.options.forEach((option, index) => {
-              const optionId = `option-${group.id}-${index}`;
+              const optionId = `option-${group.id || group.name}-${index}`; // Use name as fallback ID
               const optionEl = document.createElement('div');
               optionEl.className = 'option-item';
               const inputType = group.type === 'multiple' ? 'checkbox' : 'radio';
+              const inputName = group.id || group.name; // Use name as fallback name
+              // Ensure priceAdjustment is treated as a number
+              const priceAdj = Number(option.priceAdjustment) || 0; 
+              
               optionEl.innerHTML = `
-                  <input type="${inputType}" id="${optionId}" name="${group.id}" value="${index}" ${index === 0 && inputType ==='radio' ? 'checked' : ''}>
+                  <input type="${inputType}" id="${optionId}" name="${inputName}" value="${index}" data-price-adjustment="${priceAdj}" ${index === 0 && inputType ==='radio' ? 'checked' : ''}>
                   <label for="${optionId}">
                       ${option.name}
-                      ${option.priceAdjustment > 0 ? `(+$${option.priceAdjustment})` : ''}
+                      ${priceAdj > 0 ? ` (+$${priceAdj})` : ''}
+                      ${priceAdj < 0 ? ` (-$${Math.abs(priceAdj)})` : ''}
                   </label>
               `;
               optionsWrapper.appendChild(optionEl);
@@ -211,17 +265,13 @@ if (orderSection) {
   function updateModalPrice() {
       if (!currentItemWithOptions) return;
 
-      let currentPrice = currentItemWithOptions.basePrice;
-      const formData = new FormData(itemOptionsForm);
+      let currentPrice = Number(currentItemWithOptions.basePrice) || 0;
+      
+      // Select all checked/selected inputs within the form
+      const selectedInputs = itemOptionsForm.querySelectorAll('input:checked');
 
-      currentItemWithOptions.optionGroups.forEach(group => {
-          const selectedValue = formData.get(group.id);
-          if (selectedValue !== null) {
-              const selectedOption = group.options[selectedValue];
-              if(selectedOption && selectedOption.priceAdjustment) {
-                currentPrice += selectedOption.priceAdjustment;
-              }
-          }
+      selectedInputs.forEach(input => {
+          currentPrice += Number(input.dataset.priceAdjustment) || 0;
       });
 
       const qty = parseInt(itemOptionsQty.textContent, 10);
@@ -231,30 +281,37 @@ if (orderSection) {
 
   function handleOptionsFormSubmit(event) {
       event.preventDefault();
+      if (!currentItemWithOptions) return;
+
       const qty = parseInt(itemOptionsQty.textContent, 10);
-      if (qty === 0) {
+      if (qty <= 0) {
           itemOptionsModal.classList.add('hidden');
-          return;
+          return; // Don't add if quantity is zero or less
       }
 
-      const formData = new FormData(itemOptionsForm);
-      let finalPrice = currentItemWithOptions.basePrice;
+      let finalPrice = Number(currentItemWithOptions.basePrice) || 0;
       let selectedOptionsDesc = [];
+      const selectedInputs = itemOptionsForm.querySelectorAll('input:checked');
 
-      currentItemWithOptions.optionGroups.forEach(group => {
-          const value = formData.get(group.id);
-          if (value !== null) {
-              const option = group.options[value];
-              finalPrice += option.priceAdjustment || 0;
-              selectedOptionsDesc.push(option.name);
+      selectedInputs.forEach(input => {
+          finalPrice += Number(input.dataset.priceAdjustment) || 0;
+          // Find the corresponding label text
+          const label = itemOptionsForm.querySelector(`label[for="${input.id}"]`);
+          if (label) {
+              // Extract only the option name, removing price adjustment text
+              selectedOptionsDesc.push(label.textContent.split('(')[0].trim());
           }
       });
       
       addItemToOrder({
+          // Create a unique key for items with options to allow multiple instances
+          // E.g., combine item ID with selected option indexes or names
+          // For now, we'll keep it simple and just push, might merge later
+          orderItemId: `${currentItemWithOptions.id}_${Date.now()}`, // Simple unique ID for now
           id: currentItemWithOptions.id,
           name: currentItemWithOptions.name,
           qty,
-          price: finalPrice,
+          price: finalPrice, // Price per unit with options
           options: selectedOptionsDesc.join(', ')
       });
 
@@ -262,55 +319,91 @@ if (orderSection) {
       showToast(`已加入 ${qty} 份 ${currentItemWithOptions.name}`);
   }
 
-  function addItemToOrder(item) {
-      // For simplicity, we'll just push new items. A more robust solution would merge items.
-      workingOrder.items.push(item);
+  function addItemToOrder(newItem) {
+      // Basic implementation: Just add to the list.
+      // Future enhancement: Check if an identical item (same id + options) exists and increment qty.
+      workingOrder.items.push(newItem);
       updateAndPersistOrder();
   }
 
   function updateAndPersistOrder() {
     updateBottomBar();
-    // Persist to local storage or state
     const name = resolveName();
     if (name) {
+      // Ensure subtotal is calculated correctly before saving
+      workingOrder.subtotal = workingOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
       setOrder(getActiveDate(), name, workingOrder);
     }
   }
+  
+  // Need a function to calculate totals for the bottom bar
+  function computeTotals(date) {
+      const orders = getOrders(date) || {};
+      let classTotal = 0;
+      const unpaid = [];
+      const allNames = getNames();
+      const orderedNames = Object.keys(orders);
+      
+      allNames.forEach(name => {
+          const order = orders[name];
+          if (order) {
+              const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+              classTotal += subtotal;
+              if (!order.paid) {
+                  unpaid.push(name);
+              }
+          }
+      });
+      
+      const missing = allNames.filter(name => !orderedNames.includes(name));
+
+      return { classTotal, unpaid, missing };
+  }
+
 
   function updateBottomBar() {
       const subtotal = workingOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
       personalSubtotalEl.textContent = `$${subtotal}`;
-      // ... update other footer elements
+      
+      // Calculate and display class totals
+      const totals = computeTotals(getActiveDate());
+      if(classTotalEl) classTotalEl.textContent = `$${totals.classTotal}`;
+      if(unpaidEl) unpaidEl.textContent = `${totals.unpaid.length} 人`;
+      if(missingEl) missingEl.textContent = `${totals.missing.length} 人`;
   }
   
   // --- Event Listeners ---
   
-  // Assuming a single restaurant select for the order page now.
-  if (restaurantSelect) {
-      restaurantSelect.addEventListener('change', () => {
-          workingOrder.restaurantId = restaurantSelect.value;
-          workingOrder.items = []; // Clear items when changing restaurant
-          updateAndPersistOrder();
-          renderMenu();
-      });
-  }
+  restaurantSelect?.addEventListener('change', () => {
+      workingOrder.restaurantId = restaurantSelect.value;
+      workingOrder.items = []; // Clear items when changing restaurant
+      updateAndPersistOrder(); // Save the change and update UI
+      renderMenu(); // Re-render menu for the new restaurant
+  });
   
-  userSelect.addEventListener('change', loadWorkingOrder);
-  if (customNameInput) {
-      customNameInput.addEventListener('blur', loadWorkingOrder);
-  }
+  userSelect?.addEventListener('change', () => {
+      currentName = resolveName();
+      localStorage.setItem(NAME_STORAGE_KEY, currentName); // Save selected name
+      loadWorkingOrder();
+  });
+  
+  customNameInput?.addEventListener('blur', () => {
+      currentName = resolveName();
+      localStorage.setItem(NAME_STORAGE_KEY, currentName); // Save custom name
+      loadWorkingOrder();
+  });
   
   menuContainer.addEventListener('click', handleItemClick);
-  itemOptionsForm.addEventListener('submit', handleOptionsFormSubmit);
-  itemOptionsForm.addEventListener('change', updateModalPrice); // Update price on any option change
-  cancelOptionsBtn.addEventListener('click', () => itemOptionsModal.classList.add('hidden'));
+  itemOptionsForm?.addEventListener('submit', handleOptionsFormSubmit);
+  itemOptionsForm?.addEventListener('change', updateModalPrice); 
+  cancelOptionsBtn?.addEventListener('click', () => itemOptionsModal.classList.add('hidden'));
 
-  itemOptionsModal.addEventListener('click', (e) => {
+  itemOptionsModal?.addEventListener('click', (e) => {
       const action = e.target.dataset.action;
       if (action) {
           let qty = parseInt(itemOptionsQty.textContent, 10);
           if (action === 'increase') qty++;
-          if (action === 'decrease') qty = Math.max(1, qty - 1);
+          if (action === 'decrease') qty = Math.max(1, qty - 1); // Ensure qty is at least 1
           itemOptionsQty.textContent = qty;
           updateModalPrice();
       }
@@ -319,12 +412,29 @@ if (orderSection) {
 
   // --- Initial Load ---
   whenReady().then(() => {
-    renderRestaurants();
-    loadWorkingOrder();
+    // Initial setup for name selection
+    const names = getNames();
+    const savedName = localStorage.getItem(NAME_STORAGE_KEY);
+    if (savedName && userSelect) {
+        if (names.includes(savedName)) {
+            userSelect.value = savedName;
+        } else if (customNameInput) {
+            userSelect.value = 'other';
+            customNameInput.classList.remove('hidden');
+            customNameInput.value = savedName;
+        }
+    }
+    currentName = resolveName(); // Set initial currentName
+
+    renderRestaurants(); // Populate restaurant dropdown
+    loadWorkingOrder(); // Load order based on initial name and selected restaurant
+    
     window.addEventListener('lunchvote:update', () => {
-        // May need more specific updates later
-        renderRestaurants();
-        loadWorkingOrder();
+        // More granular updates might be better, but for now, refresh relevant parts
+        renderRestaurants(); 
+        // Re-check current user's order state in case of external changes (less likely here)
+        loadWorkingOrder(); 
+        updateBottomBar(); // Always update totals based on global state
     });
   });
 }
