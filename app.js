@@ -1,18 +1,15 @@
-// [生產級穩定版 v6.0 - 後端整合 Google Apps Script]
+// [生產級穩定版 v6.2 - computeTotals 歸位]
 
-// ****** 設定你的 Google Apps Script 部署網址 ******
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyoqutfqf-eoxPMB11UB8T7NXxPy1qV9SvQoVkxQ0vI7B0K5AG3r0ehZpO7W4qjwT_OlA/exec';
-// ****** ******
 
 const UPDATE_EVENT = 'lunchvote:update';
-const PHASE_EVENT = 'lunchvote:phase'; // Assuming phase logic remains relevant
+const PHASE_EVENT = 'lunchvote:phase';
 
-// --- 預設狀態 (用於載入失敗時的備援) ---
 const DEFAULT_STATE = {
   settings: {
     mode: 'vote', requiresPreorder: false, baseDate: null, timezone: 'Asia/Taipei',
     pinHash: null, pinLockout: null, pinAttempts: 0,
-    backup: { enabled: false, url: '' } // Backup settings might become redundant
+    backup: { enabled: false, url: '' }
   },
   restaurants: [],
   menus: {},
@@ -21,21 +18,17 @@ const DEFAULT_STATE = {
   orders: {},
 };
 
-// --- 全域變數 & 狀態管理 ---
 let state = null;
 let resolveReadyPromise;
 const readyPromise = new Promise((resolve) => {
   resolveReadyPromise = resolve;
 });
-
-// Flag to prevent multiple simultaneous saves
-let isSaving = false; 
+let isSaving = false;
 
 function whenReady() {
   return readyPromise;
 }
 
-// --- NEW: loadState from Google Apps Script ---
 async function loadState() {
   console.log("Attempting to load state from backend...");
   try {
@@ -45,76 +38,70 @@ async function loadState() {
     }
     const loadedState = await response.json();
     console.log("State loaded successfully from backend:", loadedState);
-    // Basic validation/merging with defaults might be good here
-    return { ...DEFAULT_STATE, ...loadedState }; 
+    // Ensure nested objects/arrays exist even if backend returns partial data
+     const mergedState = {
+        ...DEFAULT_STATE,
+        ...loadedState,
+        settings: { ...DEFAULT_STATE.settings, ...(loadedState.settings || {}) },
+        restaurants: loadedState.restaurants || [],
+        menus: loadedState.menus || {},
+        names: loadedState.names || [],
+        votes: loadedState.votes || {},
+        orders: loadedState.orders || {},
+    };
+    return mergedState;
   } catch (error) {
     console.error('Failed to load state from backend:', error);
-    // Return default state on error to allow app to function offline (read-only)
-    alert('無法從伺服器載入資料，將使用預設值或上次快取。部分功能可能受限。'); 
-    // Optionally load from localStorage as a fallback?
-    // const localState = localStorage.getItem('lunchvote-plus-cache');
-    // return localState ? JSON.parse(localState) : JSON.parse(JSON.stringify(DEFAULT_STATE));
-    return JSON.parse(JSON.stringify(DEFAULT_STATE)); // Return deep copy of default
+    alert('無法從伺服器載入資料，將使用預設值。部分功能可能受限。');
+    return JSON.parse(JSON.stringify(DEFAULT_STATE));
   }
 }
 
-// --- NEW: persistState to Google Apps Script ---
+
 async function persistState(triggerEvent = true) {
   if (isSaving) {
       console.warn("Save already in progress, skipping.");
-      return; // Prevent concurrent saves
+      return;
   }
   isSaving = true;
   console.log("Attempting to save state to backend...");
-  
-  // Create a deep copy to avoid potential modification issues
-  const stateToSave = JSON.parse(JSON.stringify(state)); 
+
+  const stateToSave = JSON.parse(JSON.stringify(state || DEFAULT_STATE)); // Ensure state exists
 
   try {
     const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'cors', // Important for cross-origin requests
+      mode: 'cors',
       cache: 'no-cache',
       headers: {
         'Content-Type': 'application/json',
       },
-      // Redirect handling might be needed depending on Apps Script setup
-      redirect: 'follow', 
-      body: JSON.stringify(stateToSave), // Send the current state
+      redirect: 'follow',
+      body: JSON.stringify(stateToSave),
     });
 
-    // We typically don't need to wait for the response in simple cases (fire and forget)
-    // But basic check can be useful
     if (!response.ok) {
-        // Log error but don't block UI
         console.error(`Backend save failed! status: ${response.status}`);
-        // Optionally try to parse error message if GAS returns one
-        // response.text().then(text => console.error("Error details:", text));
-        showToast("儲存到雲端失敗，請稍後再試。"); // Inform user
+        showToast("儲存到雲端失敗，請稍後再試。");
     } else {
         console.log("State saved successfully to backend.");
-        // Optionally save to localStorage as a cache/fallback on successful save?
-        // localStorage.setItem('lunchvote-plus-cache', JSON.stringify(stateToSave));
     }
-    
+
   } catch (error) {
     console.error('Error saving state to backend:', error);
-    showToast("儲存到雲端時發生網路錯誤。"); // Inform user
+    showToast("儲存到雲端時發生網路錯誤。");
   } finally {
-      isSaving = false; // Release the lock
+      isSaving = false;
   }
 
-  // Trigger UI update regardless of save success (optimistic update)
+  // Always trigger UI update immediately (optimistic update)
   if (triggerEvent) {
     window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: stateToSave }));
   }
 }
 
-// --- REMOVED: initializeData function ---
-// No longer needed as data comes from loadState
-
 // --- 時間 & PIN 碼邏輯 (Unchanged) ---
-function getActiveDate() { return state?.settings?.baseDate; } // Added safe navigation
+function getActiveDate() { return state?.settings?.baseDate; }
 
 async function simpleHash(str) {
   if (!str || typeof str !== 'string') return '';
@@ -125,144 +112,172 @@ async function simpleHash(str) {
 }
 
 async function setPin(pin) {
-  if (!state || !state.settings) return; // Guard clause
+  if (!state || !state.settings) return;
   state.settings.pinHash = await simpleHash(pin);
   state.settings.pinAttempts = 0;
   state.settings.pinLockout = null;
-  persistState(); // Save change to backend
+  await persistState(); // Ensure save completes before proceeding? Or keep async?
 }
 
 async function verifyPin(pin) {
-  if (!state || !state.settings) return { ok: false, reason: 'state_not_loaded' }; // Guard clause
+  if (!state || !state.settings) return { ok: false, reason: 'state_not_loaded' };
   const { settings } = state;
   if (!settings.pinHash) return { ok: true, reason: 'not_set' };
   if (settings.pinLockout && Date.now() < settings.pinLockout) return { ok: false, reason: 'locked', unlockAt: settings.pinLockout };
-  
+
   const hash = await simpleHash(pin);
   if (hash === settings.pinHash) {
     settings.pinAttempts = 0;
-    // No need to persist on successful verification if state doesn't change
+    // No explicit save needed if attempts reset successfully
     return { ok: true };
   } else {
     settings.pinAttempts = (settings.pinAttempts || 0) + 1;
     if (settings.pinAttempts >= 5) settings.pinLockout = Date.now() + 5 * 60 * 1000;
-    persistState(false); // Persist attempt count/lockout, maybe no UI event needed
+    await persistState(false); // Save attempts/lockout state
     return { ok: false, reason: 'incorrect' };
   }
 }
 
-// --- Core Getters/Setters (Mostly Unchanged, but call persistState) ---
-// Add guard clauses in case state hasn't loaded yet
+
+// --- Core Getters/Setters ---
 function getSettings() { return state?.settings || DEFAULT_STATE.settings; }
 function updateSettings(newSettings) {
   if (!state || !state.settings) return;
   state.settings = { ...state.settings, ...newSettings };
-  persistState(); // Save change
+  persistState();
 }
 function getNames() { return state?.names || DEFAULT_STATE.names; }
 function addNames(newNames) {
   if (!state) return;
-  const namesSet = new Set([...(state.names || []), ...newNames]);
+  const currentNames = state.names || [];
+  const namesSet = new Set([...currentNames, ...newNames.map(n => String(n).trim()).filter(Boolean)]);
   state.names = Array.from(namesSet).sort();
-  persistState(); // Save change
+  persistState();
 }
 function removeName(nameToRemove) {
   if (!state || !state.names) return;
   state.names = state.names.filter(name => name !== nameToRemove);
-  persistState(); // Save change
+  persistState();
 }
 function getRestaurants(activeOnly = false) {
   const restaurants = state?.restaurants || DEFAULT_STATE.restaurants;
-  return activeOnly ? restaurants.filter(r => r.status !== 'archived') : restaurants;
+  return activeOnly ? restaurants.filter(r => r.status !== 'archived' && r.status !== 'closed') : restaurants; // Adjust filter if needed
 }
-function getRestaurantById(id) { 
-    return state?.restaurants?.find(r => r.id === id); 
+function getRestaurantById(id) {
+    return state?.restaurants?.find(r => r.id === id);
 }
 function upsertRestaurant(data) {
   if (!state) return;
   if (!state.restaurants) state.restaurants = [];
   const index = state.restaurants.findIndex(r => r.id === data.id);
-  if (index > -1) state.restaurants[index] = data;
+  if (index > -1) state.restaurants[index] = { ...state.restaurants[index], ...data }; // Merge data
   else state.restaurants.push(data);
-  persistState(); // Save change
+  persistState();
 }
 function removeRestaurant(id) {
   if (!state) return;
   if (state.restaurants) state.restaurants = state.restaurants.filter(r => r.id !== id);
   if (state.menus) delete state.menus[id];
-  persistState(); // Save change
+  persistState();
 }
 function getMenus() { return state?.menus || DEFAULT_STATE.menus; }
 function setMenu(id, data) {
   if (!state) return;
   if (!state.menus) state.menus = {};
   state.menus[id] = data;
-  persistState(); // Save change
+  persistState();
 }
 function recordVote(date, name, id) {
   if (!state) return;
   if (!state.votes) state.votes = {};
   if (!state.votes[date]) state.votes[date] = {};
   state.votes[date][name] = id;
-  persistState(); // Save change
+  persistState();
 }
-function getVotes(date) { 
-    return state?.votes?.[date] || {}; 
+function getVotes(date) {
+    return state?.votes?.[date] || {};
 }
 function getVoteSummary(date) {
     const votes = getVotes(date);
     const summary = {};
-    getRestaurants().forEach(r => { summary[r.id] = { ...r, count: 0 }; }); // Use getter
+    getRestaurants().forEach(r => { summary[r.id] = { ...r, count: 0 }; });
     Object.values(votes).forEach(id => { if (summary[id]) summary[id].count++; });
-    return Object.values(summary);
+    return Object.values(summary).sort((a, b) => b.count - a.count); // Sort summary
 }
 
-// Order related functions (ensure they also call persistState)
 function getOrder(date, name) {
     return state?.orders?.[date]?.[name];
 }
-
 function getOrders(date) {
     return state?.orders?.[date] || {};
 }
-
 function setOrder(date, name, orderData) {
     if (!state) return;
     if (!state.orders) state.orders = {};
     if (!state.orders[date]) state.orders[date] = {};
-    // Ensure paid status is preserved if already set
     const existingOrder = state.orders[date][name];
-    state.orders[date][name] = { ...orderData, paid: existingOrder?.paid || false }; 
-    persistState(); // Save order change
+    // Ensure orderData has items, calculate subtotal
+     const items = orderData.items || [];
+     const subtotal = items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
+    state.orders[date][name] = { 
+        ...orderData, 
+        items: items, // Ensure items array exists
+        subtotal: subtotal, // Store calculated subtotal
+        paid: existingOrder?.paid || false 
+    };
+    persistState();
 }
-
-// Function to specifically update payment status
 function setPaymentStatus(date, name, isPaid) {
-    if (!state?.orders?.[date]?.[name]) return; // Order must exist
+    if (!state?.orders?.[date]?.[name]) return;
     state.orders[date][name].paid = isPaid;
-    persistState(); // Save payment status change
+    persistState();
 }
-
-
 function clearOldRecords(days) {
     if (!state) return;
-    // This needs careful implementation with backend - maybe backend handles cleanup?
-    // For now, modify local state and persist, hoping backend logic aligns or ignores old data on load.
     const cutoff = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
     if(state.votes) Object.keys(state.votes).forEach(date => { if (date < cutoff) delete state.votes[date]; });
     if(state.orders) Object.keys(state.orders).forEach(date => { if (date < cutoff) delete state.orders[date]; });
-    persistState(); // Save cleaned state
+    persistState();
 }
 
-// Placeholder for potential future direct server calls if needed beyond load/save all
+// --- NEW: computeTotals moved here ---
+function computeTotals(date) {
+    const orders = getOrders(date); // Use getter
+    const allNames = getNames(); // Use getter
+    let classTotal = 0;
+    const unpaid = [];
+    const orderedNames = Object.keys(orders);
+
+    allNames.forEach(name => {
+        const order = orders[name];
+        if (order && order.items) {
+            // Use stored subtotal if available, otherwise recalculate
+            const subtotal = order.subtotal ?? order.items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
+            classTotal += subtotal;
+            if (!order.paid) {
+                unpaid.push(name);
+            }
+        }
+    });
+
+    const missing = allNames.filter(name => !orderedNames.includes(name));
+    return { classTotal, unpaid, missing };
+}
+
+
+async function loadDataFromServer() {
+  console.log("Manually triggering state reload from server...");
+  state = await loadState();
+  window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: JSON.parse(JSON.stringify(state)) }));
+  return true;
+}
+
 async function saveDataToServer() { console.warn("saveDataToServer direct call might be redundant now"); persistState(); }
-async function loadDataFromServer() { console.warn("loadDataFromServer direct call might be redundant now"); state = await loadState(); window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: state })); }
 
-
-// --- UI 渲染 (Largely Unchanged, relies on getters) ---
+// --- UI Rendering ---
 function renderNameOptions(selectElement) {
   if (!selectElement) return;
-  const names = getNames(); // Use getter
+  const names = getNames();
   const currentValue = selectElement.value;
   selectElement.innerHTML = '<option value="">請選擇你的名字</option>';
   names.forEach(name => {
@@ -275,47 +290,43 @@ function renderNameOptions(selectElement) {
   otherOption.value = 'other';
   otherOption.textContent = '其他...';
   selectElement.appendChild(otherOption);
-  // Restore value if valid
   if (currentValue && (names.includes(currentValue) || currentValue === 'other')) {
     selectElement.value = currentValue;
+  } else {
+      selectElement.value = ""; // Ensure reset if value is invalid
   }
 }
 function renderRestaurantOptions() {
     const container = document.getElementById('voteCards');
     if (!container) return;
     container.innerHTML = '';
-    getRestaurants().forEach(restaurant => { // Use getter
+    getRestaurants(true).forEach(restaurant => { // Filter active only for voting
         const card = document.createElement('button');
-        card.className = `card vote-card ${restaurant.status === 'closed' ? 'disabled' : ''}`; // Handle closed status
+        // Card is already disabled if status is 'closed' by getRestaurants(true) logic, but double check
+        card.className = `card vote-card`; 
         card.dataset.restaurantId = restaurant.id;
         card.type = 'button';
-        card.disabled = restaurant.status === 'closed'; // Disable button if closed
         card.innerHTML = `
             <h3 class="card-title">${restaurant.name}</h3>
-            <p class="card-meta">${restaurant.requiresPreorder ? '需提前預訂' : '可當日訂'} ${restaurant.status === 'closed' ? '(停售)' : restaurant.status === 'soldout' ? '(售完)' : ''}</p>
-        `;
+            <p class="card-meta">${restaurant.requiresPreorder ? '需提前預訂' : '可當日訂'} ${restaurant.status === 'soldout' ? '(售完)' : ''}</p> 
+        `; // Simplified status display for voting
         container.appendChild(card);
     });
 }
-
-// General UI update function called after state change
 function renderUI() {
   console.log("Rendering UI with current state:", state);
   renderNameOptions(document.getElementById('user-select-vote'));
-  renderNameOptions(document.getElementById('user-select-order')); // Ensure this exists if called
-  renderRestaurantOptions(); // For vote page
-  // Other UI updates needed across different pages might go here or be handled by specific page scripts listening to UPDATE_EVENT
+  renderNameOptions(document.getElementById('user-select-order'));
+  renderRestaurantOptions();
 }
 
-// --- NEW: bootstrapApp (Async) ---
+// --- bootstrapApp (Async) ---
 async function bootstrapApp() {
-  if (state) return; // Already initialized
-  
-  // Show a loading indicator?
+  if (state) return;
+
   console.log("Bootstrapping app...");
-  document.body.classList.add('loading'); // Add loading class to body?
-  
-  // Initialize DayJS plugins
+  document.body.classList.add('loading');
+
   if (window.dayjs_plugin_utc && window.dayjs_plugin_timezone) {
       dayjs.extend(window.dayjs_plugin_utc);
       dayjs.extend(window.dayjs_plugin_timezone);
@@ -323,42 +334,32 @@ async function bootstrapApp() {
       console.error("DayJS plugins not found!");
   }
 
-  // Load state from backend (await is crucial)
-  state = await loadState(); 
-  
-  // Set default date if needed AFTER loading state
+  state = await loadState();
+
   if (state && state.settings && !state.settings.baseDate) {
     state.settings.baseDate = dayjs().tz(state.settings.timezone || 'Asia/Taipei').format('YYYY-MM-DD');
-    // Persist this default date back? Maybe not needed if loadState handles defaults well.
-    // persistState(false); // Optionally save immediately
+     // No need to persist here, let user interaction trigger saves
   }
 
-  // Initial UI render with loaded state
   renderUI();
-  
-  // Signal that the app is ready
+
   if (resolveReadyPromise) resolveReadyPromise(state);
-  
-  // Remove loading indicator
+
   document.body.classList.remove('loading');
   console.log("App bootstrap complete.");
 
-  // Listen for state updates (e.g., from other tabs, though less likely now)
-  // window.addEventListener('storage', (e) => { ... }); // localStorage listener is now irrelevant
-
-  // Listen for internal state update events (triggered by persistState)
   window.addEventListener(UPDATE_EVENT, (e) => {
       console.log("Internal update event received, re-rendering UI.");
-      state = e.detail; // Update local state variable for consistency
-      renderUI(); 
-  }); 
+      // Update the global state reference when the event fires
+      // This ensures consistency if persistState triggers the event
+      state = e.detail; 
+      renderUI();
+  });
 }
 
 // --- Global Initialization ---
-// Start the app loading process when DOM is ready
 document.addEventListener('DOMContentLoaded', bootstrapApp);
 
-// Simple Toast function used by persistState error handling
 function showToast(message) {
     const toast = document.createElement('div');
     toast.className = 'toast';
@@ -367,18 +368,18 @@ function showToast(message) {
     requestAnimationFrame(() => toast.classList.add('visible'));
     setTimeout(() => {
       toast.classList.remove('visible');
-      setTimeout(() => toast.remove(), 300);
-    }, 3500); // Longer duration for error messages
+      setTimeout(() => toast.remove(), 3500);
+    }, 2500);
 }
 
-
-// --- Exports ---
-// Export necessary functions for other modules
+// --- Exports (v6.2) ---
 export {
   bootstrapApp, whenReady, getSettings, updateSettings, getActiveDate,
   getNames, addNames, removeName, getRestaurants, getRestaurantById,
   upsertRestaurant, removeRestaurant, getMenus, setMenu, recordVote,
   getVotes, getVoteSummary, setPin, verifyPin, clearOldRecords,
-  getOrder, getOrders, setOrder, setPaymentStatus, 
-  // saveDataToServer, loadDataFromServer // Maybe keep for explicit backup/restore?
+  getOrder, getOrders, setOrder, setPaymentStatus,
+  computeTotals, // Added computeTotals
+  loadDataFromServer,
+  saveDataToServer
 };
