@@ -68,24 +68,46 @@ if (orderSection) {
   }
   
   function loadWorkingOrder() {
-      const name = resolveName();
-      if (!name) {
-          workingOrder = { restaurantId: restaurantSelect ? restaurantSelect.value : '', items: [], note: '', paid: false };
-          renderMenu(); 
-          updateBottomBar();
-          return;
+    const name = resolveName();
+    if (!name) {
+      workingOrder = {
+        restaurantId: restaurantSelect ? restaurantSelect.value : '',
+        items: [],
+        note: '',
+        paid: false,
       };
-
-      const saved = getOrder(getActiveDate(), name);
-      if (saved && saved.restaurantId === (restaurantSelect ? restaurantSelect.value : workingOrder.restaurantId) ) { // Load only if restaurant matches
-          workingOrder = JSON.parse(JSON.stringify(saved));
-      } else {
-          // Reset items if no saved order or restaurant mismatch
-          workingOrder = { restaurantId: restaurantSelect ? restaurantSelect.value : '', items: [], note: '', paid: false };
-      }
-      
       renderMenu();
       updateBottomBar();
+      return;
+    }
+
+    const saved = getOrder(getActiveDate(), name);
+
+    if (saved) {
+      // Deep clone so local edits don't mutate the shared state until persisted
+      workingOrder = JSON.parse(JSON.stringify(saved));
+
+      if (restaurantSelect) {
+        const hasSavedRestaurant = Array.from(restaurantSelect.options).some(
+          option => option.value === saved.restaurantId,
+        );
+
+        if (hasSavedRestaurant) {
+          restaurantSelect.value = saved.restaurantId;
+        }
+      }
+    } else {
+      // Reset items if no saved order is found
+      workingOrder = {
+        restaurantId: restaurantSelect ? restaurantSelect.value : '',
+        items: [],
+        note: '',
+        paid: false,
+      };
+    }
+
+    renderMenu();
+    updateBottomBar();
   }
 
   function renderRestaurants() {
@@ -114,7 +136,9 @@ if (orderSection) {
 
   // **** MODIFIED renderMenu Function ****
   function renderMenu() {
-    const restaurantId = restaurantSelect ? restaurantSelect.value : workingOrder.restaurantId;
+    const restaurantId = restaurantSelect && restaurantSelect.value
+        ? restaurantSelect.value
+        : workingOrder.restaurantId;
     menuContainer.innerHTML = ''; // Clear previous content first
 
     if (!restaurantId) {
