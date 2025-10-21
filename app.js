@@ -6,6 +6,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/d/YOUR_SCRIPT_ID/userc
 const STATE_STORAGE_KEY = 'lunchvote:state-cache';
 const UPDATE_EVENT = 'lunchvote:update';
 const PHASE_EVENT = 'lunchvote:phase';
+const REMOTE_SYNC_INTERVAL = 30_000;
 
 // --- 預設狀態 ---
 const DEFAULT_STATE = {
@@ -33,12 +34,28 @@ const DEFAULT_STATE = {
 // --- 全域變數 & 狀態管理 ---
 let state = null;
 let resolveReadyPromise;
+let remoteSyncTimer = null;
+let remoteSyncInFlight = false;
+let visibilityListenerAttached = false;
+let hasPendingUnsyncedChanges = false;
+let lastSyncedSignature = null;
+let persistRetryTimer = null;
+let persistQueue = Promise.resolve();
 const readyPromise = new Promise((resolve) => {
   resolveReadyPromise = resolve;
 });
 
 function cloneState(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function computeStateSignature(snapshot) {
+  try {
+    return JSON.stringify(snapshot);
+  } catch (error) {
+    console.warn('建立狀態摘要失敗:', error);
+    return null;
+  }
 }
 
 function mergeWithDefaults(rawState) {
@@ -96,6 +113,70 @@ function writeCachedState(snapshot) {
   }
 }
 
+function schedulePersistRetry() {
+  if (persistRetryTimer || !hasPendingUnsyncedChanges) return;
+  persistRetryTimer = setTimeout(async () => {
+    persistRetryTimer = null;
+    if (!hasPendingUnsyncedChanges) return;
+    await persistState(false);
+  }, 5_000);
+}
+
+async function refreshStateFromRemote({ force = false } = {}) {
+  if (!state) return;
+  if (remoteSyncInFlight) return;
+  if (!force && hasPendingUnsyncedChanges) return;
+
+  remoteSyncInFlight = true;
+  try {
+    const remoteState = await loadState();
+    const signature = computeStateSignature(remoteState);
+    if (!signature) return;
+
+    if (signature === lastSyncedSignature) {
+      lastSyncedSignature = signature;
+      hasPendingUnsyncedChanges = false;
+      return;
+    }
+
+    state = remoteState;
+    lastSyncedSignature = signature;
+    hasPendingUnsyncedChanges = false;
+    renderUI();
+    emitPhaseEvent();
+    window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: cloneState(state) }));
+  } catch (error) {
+    console.warn('遠端同步失敗:', error);
+  } finally {
+    remoteSyncInFlight = false;
+  }
+}
+
+function requestForegroundSync() {
+  if (hasPendingUnsyncedChanges) {
+    persistState(false);
+  } else {
+    refreshStateFromRemote({ force: true });
+  }
+}
+
+function handleVisibilityRefresh() {
+  if (document.hidden) return;
+  requestForegroundSync();
+}
+
+function startRemoteSync() {
+  if (!remoteSyncTimer) {
+    remoteSyncTimer = setInterval(() => refreshStateFromRemote(), REMOTE_SYNC_INTERVAL);
+  }
+  if (!visibilityListenerAttached) {
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+    window.addEventListener('focus', requestForegroundSync);
+    visibilityListenerAttached = true;
+  }
+  requestForegroundSync();
+}
+
 function whenReady() {
   return readyPromise;
 }
@@ -138,41 +219,58 @@ async function loadState() {
 
 async function persistState(triggerEvent = true) {
   if (!state) return;
-  const snapshot = cloneState(state);
-  writeCachedState(snapshot);
-  try {
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'cors',
-      cache: 'no-cache',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(snapshot)
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const text = await response.text();
-    let result = null;
+  hasPendingUnsyncedChanges = true;
+  const queued = persistQueue.then(async () => {
+    const snapshot = cloneState(state);
+    writeCachedState(snapshot);
     try {
-      result = text ? JSON.parse(text) : null;
-    } catch (parseError) {
-      result = { ok: true, raw: text };
-    }
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',
+        cache: 'no-cache',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(snapshot)
+      });
 
-    if (triggerEvent) {
-      window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: snapshot }));
-    }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const text = await response.text();
+      let result = null;
+      try {
+        result = text ? JSON.parse(text) : null;
+      } catch (parseError) {
+        result = { ok: true, raw: text };
+      }
 
-    return result;
-  } catch (error) {
-    console.error('無法將資料儲存到 Google Sheets:', error);
-    if (triggerEvent) {
-      window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: snapshot }));
+      const signature = computeStateSignature(snapshot);
+      if (signature) {
+        lastSyncedSignature = signature;
+      }
+      hasPendingUnsyncedChanges = false;
+      if (persistRetryTimer) {
+        clearTimeout(persistRetryTimer);
+        persistRetryTimer = null;
+      }
+      if (triggerEvent) {
+        window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: snapshot }));
+      }
+
+      return result;
+    } catch (error) {
+      console.error('無法將資料儲存到 Google Sheets:', error);
+      schedulePersistRetry();
+      if (triggerEvent) {
+        window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: snapshot }));
+      }
     }
-  }
+  });
+
+  // 確保下一次呼叫會在此序列完成後才執行
+  persistQueue = queued.catch(() => {});
+  return queued;
 }
 
 // --- 資料初始化 ---
@@ -601,6 +699,12 @@ async function bootstrapApp() {
   dayjs.extend(window.dayjs_plugin_utc);
   dayjs.extend(window.dayjs_plugin_timezone);
   state = await loadState();
+  lastSyncedSignature = computeStateSignature(state);
+  hasPendingUnsyncedChanges = false;
+  if (persistRetryTimer) {
+    clearTimeout(persistRetryTimer);
+    persistRetryTimer = null;
+  }
   if (!state.settings.baseDate) {
     state.settings.baseDate = dayjs().tz(state.settings.timezone).format('YYYY-MM-DD');
   }
@@ -610,6 +714,7 @@ async function bootstrapApp() {
   if (resolveReadyPromise) resolveReadyPromise(state);
 
   window.addEventListener(UPDATE_EVENT, renderUI);
+  startRemoteSync();
   console.log("LunchVote+ 中央電腦 (v5.0-stable) 已啟動。");
 }
 
