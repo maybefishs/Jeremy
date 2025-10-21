@@ -5,7 +5,8 @@ import {
   getVotes,
   getVoteSummary,
   getRestaurantById,
-  getNames
+  getNames,
+  UPDATE_EVENT //
 } from './app.js';
 
 // --- 全域變數 ---
