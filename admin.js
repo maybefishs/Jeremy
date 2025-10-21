@@ -125,7 +125,10 @@ if (adminPage) {
   function populateSettings() {
     const settings = getSettings();
     if(settingsForm && settingsForm.mode) settingsForm.mode.value = settings.mode;
-    if(settingsForm && settingsForm.baseDate) settingsForm.baseDate.value = settings.baseDate;
+    if(settingsForm && settingsForm.baseDate && settings.baseDate) {
+      // 轉換時間戳記 (e.g., 1760803200000) 為 "YYYY-MM-DD" 格式
+      settingsForm.baseDate.value = dayjs(settings.baseDate).format('YYYY-MM-DD');
+    }
     if(settingsForm && settingsForm.timezone) settingsForm.timezone.value = settings.timezone;
     if(settingsForm && settingsForm.requiresPreorder) settingsForm.requiresPreorder.checked = !!settings.requiresPreorder;
     if(backupToggle) backupToggle.checked = !!settings.backup?.enabled;
