@@ -3,6 +3,7 @@
 // ===== Google Apps Script 後端 URL =====
 // 請將此 URL 替換為您在步驟 2.3 中複製的網頁應用程式網址
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/d/YOUR_SCRIPT_ID/usercontent';
+const STATE_STORAGE_KEY = 'lunchvote:state-cache';
 const UPDATE_EVENT = 'lunchvote:update';
 const PHASE_EVENT = 'lunchvote:phase';
 
@@ -36,6 +37,65 @@ const readyPromise = new Promise((resolve) => {
   resolveReadyPromise = resolve;
 });
 
+function cloneState(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function mergeWithDefaults(rawState) {
+  if (!rawState || typeof rawState !== 'object') return null;
+  const merged = { ...cloneState(DEFAULT_STATE), ...rawState };
+  merged.settings = { ...DEFAULT_STATE.settings, ...(rawState.settings || {}) };
+  return merged;
+}
+
+function looksLikeState(candidate) {
+  if (!candidate || typeof candidate !== 'object') return false;
+  return (
+    'settings' in candidate ||
+    'restaurants' in candidate ||
+    'menus' in candidate ||
+    'names' in candidate ||
+    'orders' in candidate ||
+    'votes' in candidate
+  );
+}
+
+function unwrapStatePayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (looksLikeState(payload)) return payload;
+  if (payload.state && typeof payload.state === 'object') {
+    const unwrapped = unwrapStatePayload(payload.state);
+    if (unwrapped) return unwrapped;
+  }
+  if (payload.data && typeof payload.data === 'object') {
+    const unwrapped = unwrapStatePayload(payload.data);
+    if (unwrapped) return unwrapped;
+  }
+  return null;
+}
+
+function readCachedState() {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return mergeWithDefaults(parsed);
+  } catch (error) {
+    console.warn('讀取本地快取狀態失敗:', error);
+    return null;
+  }
+}
+
+function writeCachedState(snapshot) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn('寫入本地快取狀態失敗:', error);
+  }
+}
+
 function whenReady() {
   return readyPromise;
 }
@@ -51,21 +111,35 @@ async function loadState() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+    const text = await response.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (parseError) {
+      throw new Error(`無法解析遠端回應: ${parseError.message}`);
+    }
 
-    const data = await response.json();
+    const extracted = mergeWithDefaults(unwrapStatePayload(data) || data);
+    if (!extracted) {
+      throw new Error('遠端回應缺少可用的狀態資料');
+    }
 
-    return {
-      ...DEFAULT_STATE,
-      ...data,
-      settings: { ...DEFAULT_STATE.settings, ...data.settings },
-    };
+    writeCachedState(cloneState(extracted));
+    return extracted;
   } catch (error) {
-    console.error('無法從 Google Sheets 讀取資料，使用本地預設狀態:', error);
-    return JSON.parse(JSON.stringify(DEFAULT_STATE));
+    console.error('無法從 Google Sheets 讀取資料，嘗試使用本地快取:', error);
+    const cached = readCachedState();
+    if (cached) {
+      return cached;
+    }
+    return cloneState(DEFAULT_STATE);
   }
 }
 
 async function persistState(triggerEvent = true) {
+  if (!state) return;
+  const snapshot = cloneState(state);
+  writeCachedState(snapshot);
   try {
     const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
@@ -74,22 +148,30 @@ async function persistState(triggerEvent = true) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(state)
+      body: JSON.stringify(snapshot)
     });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
-    const result = await response.json();
+    const text = await response.text();
+    let result = null;
+    try {
+      result = text ? JSON.parse(text) : null;
+    } catch (parseError) {
+      result = { ok: true, raw: text };
+    }
 
     if (triggerEvent) {
-      window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: JSON.parse(JSON.stringify(state)) }));
+      window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: snapshot }));
     }
 
     return result;
   } catch (error) {
     console.error('無法將資料儲存到 Google Sheets:', error);
+    if (triggerEvent) {
+      window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: snapshot }));
+    }
   }
 }
 
@@ -454,22 +536,22 @@ async function loadDataFromServer() {
     throw new Error(message || '還原失敗');
   }
 
-  const payload = await response.json().catch(() => null);
-  const incomingState = payload && typeof payload === 'object'
-    ? (payload.state && typeof payload.state === 'object' ? payload.state : payload)
-    : null;
+  const text = await response.text();
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch (error) {
+    throw new Error('備份資料不是有效的 JSON');
+  }
 
+  const incomingState = mergeWithDefaults(unwrapStatePayload(payload) || payload);
   if (!incomingState) {
     throw new Error('備份資料格式不正確');
   }
 
-  state = {
-    ...JSON.parse(JSON.stringify(DEFAULT_STATE)),
-    ...incomingState,
-    settings: { ...DEFAULT_STATE.settings, ...(incomingState.settings || {}) }
-  };
+  state = incomingState;
 
-  persistState();
+  await persistState();
   emitPhaseEvent();
 }
 
