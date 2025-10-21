@@ -58,10 +58,74 @@ function computeStateSignature(snapshot) {
   }
 }
 
+function normalizeBaseDate(baseDate, timezone) {
+  if (baseDate === undefined || baseDate === null || baseDate === '') {
+    return '';
+  }
+
+  const tz = timezone || DEFAULT_STATE.settings.timezone;
+  const toDateString = (input) => {
+    if (typeof dayjs !== 'undefined') {
+      if (dayjs.tz) {
+        const zoned = dayjs(input).tz(tz);
+        if (zoned.isValid()) return zoned.format('YYYY-MM-DD');
+      }
+      const parsed = dayjs(input);
+      if (parsed.isValid()) return parsed.format('YYYY-MM-DD');
+    }
+    const date = new Date(input);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+  };
+
+  if (typeof baseDate === 'number') {
+    return toDateString(baseDate);
+  }
+
+  if (baseDate instanceof Date) {
+    return toDateString(baseDate);
+  }
+
+  if (typeof baseDate === 'string') {
+    const trimmed = baseDate.trim();
+    if (!trimmed) return '';
+    if (/^\d+$/.test(trimmed)) {
+      const asNumber = Number(trimmed);
+      if (!Number.isNaN(asNumber)) {
+        return toDateString(asNumber);
+      }
+    }
+    if (typeof dayjs !== 'undefined') {
+      const strict = dayjs(trimmed, 'YYYY-MM-DD', true);
+      if (strict.isValid()) return strict.format('YYYY-MM-DD');
+    }
+    return toDateString(trimmed);
+  }
+
+  return '';
+}
+
+function normalizeSettings(rawSettings) {
+  const merged = { ...DEFAULT_STATE.settings, ...(rawSettings || {}) };
+  merged.requiresPreorder = !!merged.requiresPreorder;
+  merged.voteLocked = !!merged.voteLocked;
+  merged.orderLocked = !!merged.orderLocked;
+  merged.pinAttempts = Number.isFinite(Number(merged.pinAttempts)) ? Number(merged.pinAttempts) : 0;
+  if (!merged.backup || typeof merged.backup !== 'object') {
+    merged.backup = { ...DEFAULT_STATE.settings.backup };
+  } else {
+    merged.backup = { ...DEFAULT_STATE.settings.backup, ...merged.backup };
+  }
+  merged.voteCutoff = typeof merged.voteCutoff === 'string' ? merged.voteCutoff : '';
+  merged.orderCutoff = typeof merged.orderCutoff === 'string' ? merged.orderCutoff : '';
+  merged.baseDate = normalizeBaseDate(merged.baseDate, merged.timezone);
+  return merged;
+}
+
 function mergeWithDefaults(rawState) {
   if (!rawState || typeof rawState !== 'object') return null;
   const merged = { ...cloneState(DEFAULT_STATE), ...rawState };
-  merged.settings = { ...DEFAULT_STATE.settings, ...(rawState.settings || {}) };
+  merged.settings = normalizeSettings(rawState.settings || merged.settings);
   return merged;
 }
 
@@ -319,7 +383,7 @@ async function verifyPin(pin) {
 function getSettings() { return state.settings; }
 function updateSettings(newSettings) {
   const previousMode = state.settings.mode;
-  state.settings = { ...state.settings, ...newSettings };
+  state.settings = normalizeSettings({ ...state.settings, ...newSettings });
   persistState();
   const shouldEmit = Boolean(
     newSettings && (
