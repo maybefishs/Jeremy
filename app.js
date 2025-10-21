@@ -374,7 +374,8 @@ function showToast(message) {
 
 // --- Exports (v6.2) ---
 export {
-  bootstrapApp, whenReady, getSettings, updateSettings, getActiveDate,
+  bootstrapApp, whenReady, UPDATE_EVENT, // <-- 在這裡補上
+  getSettings, updateSettings, getActiveDate,
   getNames, addNames, removeName, getRestaurants, getRestaurantById,
   upsertRestaurant, removeRestaurant, getMenus, setMenu, recordVote,
   getVotes, getVoteSummary, setPin, verifyPin, clearOldRecords,
